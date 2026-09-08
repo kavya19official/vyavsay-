@@ -1,0 +1,25 @@
+{
+  "startups": [
+    { "id": "st_agrisense", "name": "AgriSense Labs", "sector": "AgriTech · AI/ML", "trl": "TRL 6", "recog": "DPIIT Recognised", "pilots": 3, "rating": 4.6, "badge": "Eligible", "loc": "Pune, MH", "tags": ["AgriTech", "AI/ML"], "registered": true, "dpiit": true, "yearsActive": 4, "certifications": ["ISO 27001", "DPIIT Certificate"] },
+    { "id": "st_nirogstream", "name": "NirogStream", "sector": "HealthTech · IoT", "trl": "TRL 5", "recog": "DPIIT Recognised", "pilots": 1, "rating": 4.2, "badge": "Eligible", "loc": "Nagpur, MH", "tags": ["HealthTech", "IoT"], "registered": true, "dpiit": true, "yearsActive": 2, "certifications": ["DPIIT Certificate"] },
+    { "id": "st_tracknova", "name": "TrackNova", "sector": "Mobility · GPS/Analytics", "trl": "TRL 7", "recog": "Startup India Seed Funded", "pilots": 5, "rating": 4.8, "badge": "Verified", "loc": "Mumbai, MH", "tags": ["Mobility", "Analytics"], "registered": true, "dpiit": true, "yearsActive": 4, "certifications": ["ISO 27001", "DPIIT Certificate"] },
+    { "id": "st_jalmitra", "name": "JalMitra", "sector": "CleanTech · Sensors", "trl": "TRL 6", "recog": "DPIIT Recognised", "pilots": 2, "rating": 4.4, "badge": "Eligible", "loc": "Aurangabad, MH", "tags": ["CleanTech", "IoT"], "registered": true, "dpiit": true, "yearsActive": 3, "certifications": ["ISO 27001", "DPIIT Certificate"] },
+    { "id": "st_skillbridge", "name": "SkillBridge AI", "sector": "EdTech · NLP", "trl": "TRL 4", "recog": "DPIIT Recognised", "pilots": 0, "rating": null, "badge": "Under Review", "loc": "Nashik, MH", "tags": ["EdTech", "AI/ML"], "registered": true, "dpiit": true, "yearsActive": 1, "certifications": ["DPIIT Certificate"] },
+    { "id": "st_marketlinkr", "name": "MarketLinkr", "sector": "AgriTech · Marketplace", "trl": "TRL 7", "recog": "Incubator Certified", "pilots": 4, "rating": 4.5, "badge": "Verified", "loc": "Kolhapur, MH", "tags": ["AgriTech", "Marketplace"], "registered": true, "dpiit": false, "yearsActive": 6, "certifications": ["ISO 27001"] },
+    { "id": "st_routewise", "name": "RouteWise Tech", "sector": "Mobility · Crowd-sourced Data", "trl": "TRL 5", "recog": "DPIIT Recognised", "pilots": 1, "rating": 4.0, "badge": "Under Review", "loc": "Thane, MH", "tags": ["Mobility", "AI/ML"], "registered": true, "dpiit": true, "yearsActive": 3, "certifications": [] },
+    { "id": "st_pathai", "name": "PathAI", "sector": "Mobility · Computer Vision", "trl": "TRL 4", "recog": "None", "pilots": 0, "rating": 3.4, "badge": "Under Review", "loc": "Nagpur, MH", "tags": ["Mobility", "AI/ML"], "registered": true, "dpiit": false, "yearsActive": 11, "certifications": [] }
+  ],
+  "challenges": [
+    { "id": "SIH26136", "title": "Startup-friendly public procurement mechanism", "dept": "Skills, Employment & Innovation", "status": "Applications Open", "apps": 14, "budget": "₹18–35 L", "deadline": "30 Sep 2026", "theme": "Miscellaneous", "risk": "Medium" },
+    { "id": "MH-AG-0091", "title": "Early detection of crop disease & pest infestation", "dept": "Agriculture", "status": "Expert Evaluation", "apps": 22, "budget": "₹12–20 L", "deadline": "12 Sep 2026", "theme": "AgriTech", "risk": "Low" },
+    { "id": "MH-HL-0044", "title": "Rural primary healthcare access & quality", "dept": "Public Health", "status": "Startup Shortlisted", "apps": 31, "budget": "₹40–60 L", "deadline": "Closed", "theme": "HealthTech", "risk": "High" },
+    { "id": "MH-TR-0022", "title": "Real-time public transport tracking", "dept": "Transport", "status": "Pilot Active", "apps": 9, "budget": "₹25 L", "deadline": "Closed", "theme": "Mobility", "risk": "Medium" },
+    { "id": "MH-ED-0013", "title": "Aligning skilling programs to job market demand", "dept": "Skills & Employment", "status": "Under Review", "apps": 0, "budget": "TBD", "deadline": "Draft", "theme": "EdTech", "risk": "Low" },
+    { "id": "MH-WT-0007", "title": "Decentralised water-quality monitoring", "dept": "Water Resources", "status": "Independent Validation", "apps": 17, "budget": "₹22 L", "deadline": "Closed", "theme": "CleanTech", "risk": "Medium" }
+  ],
+  "applications": [
+    { "id": "ap_seed_1", "challengeId": "MH-TR-0022", "startupId": "st_tracknova", "submittedAt": "2026-08-20T10:00:00.000Z" },
+    { "id": "ap_seed_2", "challengeId": "MH-TR-0022", "startupId": "st_routewise", "submittedAt": "2026-08-21T10:00:00.000Z" },
+    { "id": "ap_seed_3", "challengeId": "MH-TR-0022", "startupId": "st_pathai", "submittedAt": "2026-08-22T10:00:00.000Z" }
+  ]
+}
