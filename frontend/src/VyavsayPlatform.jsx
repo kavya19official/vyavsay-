@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   LayoutDashboard, Target, Rocket, FileText, ClipboardCheck, FlaskConical,
   FileSignature, Wallet, ShieldCheck, TrendingUp, Library, Settings, Search,
@@ -8,6 +8,7 @@ import {
   ShieldAlert, UserCheck, Layers, ScrollText, Gauge, ArrowUpRight, Info,
   ChevronLeft, Sparkles, Lock,
 } from "lucide-react";
+import { api } from "./api.js";
 
 /* ---------------------------------------------------------------------- */
 /*  DESIGN TOKENS                                                          */
@@ -215,11 +216,12 @@ function Card({ children, style, className = "", noPad }) {
   );
 }
 
-function Btn({ children, variant = "primary", icon: Icon, onClick, small, style }) {
+function Btn({ children, variant = "primary", icon: Icon, onClick, small, style, disabled }) {
   const base = {
     display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600,
     fontSize: small ? 12.5 : 13.5, padding: small ? "6px 11px" : "9px 16px",
-    borderRadius: 4, cursor: "pointer", border: "1px solid transparent", transition: "opacity .15s",
+    borderRadius: 4, cursor: disabled ? "default" : "pointer", border: "1px solid transparent", transition: "opacity .15s",
+    opacity: disabled ? 0.55 : 1,
   };
   const variants = {
     primary: { background: C.ink, color: "#fff" },
@@ -229,9 +231,9 @@ function Btn({ children, variant = "primary", icon: Icon, onClick, small, style 
     danger: { background: "#fff", color: C.rust, border: `1px solid ${C.rust}55` },
   };
   return (
-    <button onClick={onClick} style={{ ...base, ...variants[variant], ...style }}
-      onMouseOver={(e) => (e.currentTarget.style.opacity = 0.85)}
-      onMouseOut={(e) => (e.currentTarget.style.opacity = 1)}>
+    <button onClick={disabled ? undefined : onClick} disabled={disabled} style={{ ...base, ...variants[variant], ...style }}
+      onMouseOver={(e) => { if (!disabled) e.currentTarget.style.opacity = 0.85; }}
+      onMouseOut={(e) => { if (!disabled) e.currentTarget.style.opacity = 1; }}>
       {Icon && <Icon size={small ? 14 : 15} />}
       {children}
     </button>
@@ -380,13 +382,21 @@ const CHALLENGES = [
 ];
 
 const STARTUPS = [
-  { name: "AgriSense Labs", sector: "AgriTech · AI/ML", trl: "TRL 6", recog: "DPIIT Recognised", pilots: 3, rating: 4.6, badge: "Eligible", loc: "Pune, MH" },
-  { name: "NirogStream", sector: "HealthTech · IoT", trl: "TRL 5", recog: "DPIIT Recognised", pilots: 1, rating: 4.2, badge: "Eligible", loc: "Nagpur, MH" },
-  { name: "TrackNova", sector: "Mobility · GPS/Analytics", trl: "TRL 7", recog: "Startup India Seed Funded", pilots: 5, rating: 4.8, badge: "Verified", loc: "Mumbai, MH" },
-  { name: "JalMitra", sector: "CleanTech · Sensors", trl: "TRL 6", recog: "DPIIT Recognised", pilots: 2, rating: 4.4, badge: "Eligible", loc: "Aurangabad, MH" },
-  { name: "SkillBridge AI", sector: "EdTech · NLP", trl: "TRL 4", recog: "DPIIT Recognised", pilots: 0, rating: "New", badge: "Under Review", loc: "Nashik, MH" },
-  { name: "MarketLinkr", sector: "AgriTech · Marketplace", trl: "TRL 7", recog: "Incubator Certified", pilots: 4, rating: 4.5, badge: "Verified", loc: "Kolhapur, MH" },
+  { name: "AgriSense Labs", sector: "AgriTech · AI/ML", trl: "TRL 6", recog: "DPIIT Recognised", pilots: 3, rating: 4.6, badge: "Eligible", loc: "Pune, MH", tags: ["AgriTech", "AI/ML"], registered: true, dpiit: true, yearsActive: 4, certifications: ["ISO 27001", "DPIIT Certificate"] },
+  { name: "NirogStream", sector: "HealthTech · IoT", trl: "TRL 5", recog: "DPIIT Recognised", pilots: 1, rating: 4.2, badge: "Eligible", loc: "Nagpur, MH", tags: ["HealthTech", "IoT"], registered: true, dpiit: true, yearsActive: 2, certifications: ["DPIIT Certificate"] },
+  { name: "TrackNova", sector: "Mobility · GPS/Analytics", trl: "TRL 7", recog: "Startup India Seed Funded", pilots: 5, rating: 4.8, badge: "Verified", loc: "Mumbai, MH", tags: ["Mobility", "Analytics"], registered: true, dpiit: true, yearsActive: 4, certifications: ["ISO 27001", "DPIIT Certificate"] },
+  { name: "JalMitra", sector: "CleanTech · Sensors", trl: "TRL 6", recog: "DPIIT Recognised", pilots: 2, rating: 4.4, badge: "Eligible", loc: "Aurangabad, MH", tags: ["CleanTech", "IoT"], registered: true, dpiit: true, yearsActive: 3, certifications: ["ISO 27001", "DPIIT Certificate"] },
+  { name: "SkillBridge AI", sector: "EdTech · NLP", trl: "TRL 4", recog: "DPIIT Recognised", pilots: 0, rating: "New", badge: "Under Review", loc: "Nashik, MH", tags: ["EdTech", "AI/ML"], registered: true, dpiit: true, yearsActive: 1, certifications: ["DPIIT Certificate"] },
+  { name: "MarketLinkr", sector: "AgriTech · Marketplace", trl: "TRL 7", recog: "Incubator Certified", pilots: 4, rating: 4.5, badge: "Verified", loc: "Kolhapur, MH", tags: ["AgriTech", "Marketplace"], registered: true, dpiit: false, yearsActive: 6, certifications: ["ISO 27001"] },
+  { name: "RouteWise Tech", sector: "Mobility · Crowd-sourced Data", trl: "TRL 5", recog: "DPIIT Recognised", pilots: 1, rating: 4.0, badge: "Under Review", loc: "Thane, MH", tags: ["Mobility", "AI/ML"], registered: true, dpiit: true, yearsActive: 3, certifications: [] },
+  { name: "PathAI", sector: "Mobility · Computer Vision", trl: "TRL 4", recog: "None", pilots: 0, rating: 3.4, badge: "Under Review", loc: "Nagpur, MH", tags: ["Mobility", "AI/ML"], registered: true, dpiit: false, yearsActive: 11, certifications: [] },
 ];
+
+// NOTE: AI Startup Discovery matching and Auto-Eligibility Screening logic
+// used to live here as client-side functions. Both now run on the backend
+// (see /backend/src/matching.js and /backend/src/eligibility.js) — the two
+// panels below (StartupDiscoveryPanel, EligibilityPanel) fetch live results
+// from the API instead of computing them in the browser.
 
 const EVAL_CRITERIA = [
   { k: "Technical Feasibility", v: 8 }, { k: "Innovation", v: 9 },
@@ -1049,7 +1059,7 @@ function ChallengesList({ onOpen, onCreate }) {
 /* ---------------------------------------------------------------------- */
 function ChallengeDetail({ ch, onBack }) {
   const [tab, setTab] = useState("overview");
-  const tabs = ["Overview", "Eligibility Screening", "Evaluation Criteria", "Data / IP & Security", "Submitted Ideas (14)", "Updates"];
+  const tabs = ["Overview", "AI Startup Discovery", "Eligibility Screening", "Evaluation Criteria", "Data / IP & Security", "Submitted Ideas (14)", "Updates"];
   return (
     <div>
       <div onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12.5, color: C.inkSoft, cursor: "pointer", marginBottom: 12, fontWeight: 600 }}>
@@ -1146,7 +1156,8 @@ function ChallengeDetail({ ch, onBack }) {
         </div>
       )}
 
-      {tab === "Eligibility Screening" && <EligibilityPanel />}
+      {tab === "AI Startup Discovery" && <StartupDiscoveryPanel ch={ch} />}
+      {tab === "Eligibility Screening" && <EligibilityPanel ch={ch} />}
       {tab === "Evaluation Criteria" && <EvalCriteriaPanel />}
       {tab === "Data / IP & Security" && <DataIpPanel />}
       {tab === "Submitted Ideas (14)" && <SubmittedIdeasPanel />}
@@ -1163,36 +1174,182 @@ function ChallengeDetail({ ch, onBack }) {
   );
 }
 
-function EligibilityPanel() {
-  const apps = [
-    { name: "TrackNova", score: 96, status: "Eligible", missing: "—" },
-    { name: "RouteWise Tech", score: 62, status: "Missing Documents", missing: "DPIIT certificate" },
-    { name: "PathAI", score: 40, status: "Ineligible", missing: "Turnover exceeds relaxed threshold" },
-  ];
+/* ---------------------------------------------------------------------- */
+/*  STARTUP DISCOVERY PANEL — feature: automatic AI shortlisting           */
+/*  Live data from GET /api/challenges/:id/discovery                      */
+/* ---------------------------------------------------------------------- */
+function StartupDiscoveryPanel({ ch }) {
+  const [expanded, setExpanded] = useState(null);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [inviteState, setInviteState] = useState({}); // startupId -> "sending" | "sent" | error message
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    api.getDiscovery(ch.id)
+      .then((res) => { if (!cancelled) setData(res); })
+      .catch((err) => { if (!cancelled) setError(err.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [ch.id]);
+
+  async function invite(startupId) {
+    setInviteState((s) => ({ ...s, [startupId]: "sending" }));
+    try {
+      await api.applyToChallenge(ch.id, startupId);
+      setInviteState((s) => ({ ...s, [startupId]: "sent" }));
+    } catch (err) {
+      setInviteState((s) => ({ ...s, [startupId]: err.status === 409 ? "sent" : "error" }));
+    }
+  }
+
+  if (loading) return <Card>Running AI discovery against the startup database…</Card>;
+  if (error) return <Card style={{ color: C.rust }}>Couldn't reach the discovery service: {error}. Is the backend running on port 4000?</Card>;
+
+  const matches = data.matches;
+
+  return (
+    <div>
+      <Card style={{ marginBottom: 16, background: C.violetSoft, border: `1px solid ${C.violet}22` }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: C.violet, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Sparkles size={16} color="#fff" />
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13.5 }}>{data.message}</div>
+            <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 3 }}>
+              Matched automatically against "{data.theme}" instead of manual searching across the startup database.
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card noPad>
+        <div style={{ padding: "14px 16px", fontWeight: 700, borderBottom: `1px solid ${C.line}`, display: "flex", justifyContent: "space-between" }}>
+          <span>AI-matched startups</span>
+          <span style={{ fontSize: 11.5, color: C.inkSoft, fontWeight: 500 }}>Sector match · Govt. experience · Tech fit</span>
+        </div>
+        {matches.map((s) => {
+          const invited = inviteState[s.id];
+          return (
+            <div key={s.id} style={{ borderTop: `1px solid ${C.line}` }}>
+              <div
+                onClick={() => setExpanded(expanded === s.id ? null : s.id)}
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", cursor: "pointer" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 6, background: C.navySoft, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <Rocket size={15} color={C.ink} />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13.5 }}>{s.name}</div>
+                    <div style={{ fontSize: 11.5, color: C.inkSoft }}>{s.sector} · {s.trl} · {s.govtExperience} past govt. pilots</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 12.5, color: C.inkSoft }}>Match score</div>
+                    <div style={{ fontWeight: 700, color: s.shortlisted ? C.teal : C.inkSoft }}>{s.matchScore}%</div>
+                  </div>
+                  {s.shortlisted ? <StatusChip label="Startup Shortlisted" small /> : <StatusChip label="Under Review" small />}
+                  {expanded === s.id ? <ChevronUp size={16} color={C.inkSoft} /> : <ChevronDown size={16} color={C.inkSoft} />}
+                </div>
+              </div>
+              {expanded === s.id && (
+                <div style={{ padding: "0 16px 16px 60px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <div style={{ fontSize: 12, color: C.inkSoft, display: "flex", alignItems: "center", gap: 4 }}>
+                    {s.sectorMatch ? <CheckCircle2 size={13} color={C.teal} /> : <AlertTriangle size={13} color={C.brass} />} Sector match
+                  </div>
+                  <div style={{ fontSize: 12, color: C.inkSoft, display: "flex", alignItems: "center", gap: 4 }}>
+                    <Building2 size={13} color={C.teal} /> {s.govtExperience} government pilot(s) delivered
+                  </div>
+                  <div style={{ fontSize: 12, color: C.inkSoft, display: "flex", alignItems: "center", gap: 4 }}>
+                    <Gauge size={13} color={C.teal} /> Technology readiness {s.trl}
+                  </div>
+                  <Btn
+                    small
+                    variant={invited === "sent" ? "secondary" : "primary"}
+                    style={{ marginLeft: "auto" }}
+                    disabled={invited === "sending" || invited === "sent"}
+                    onClick={(e) => { e.stopPropagation(); invite(s.id); }}
+                  >
+                    {invited === "sending" ? "Sending…" : invited === "sent" ? "Invited ✓" : invited === "error" ? "Retry invite" : "Invite to apply"}
+                  </Btn>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/*  ELIGIBILITY PANEL — feature: automatic pre-evaluation screening        */
+/*  Live data from GET /api/challenges/:id/applications                   */
+/* ---------------------------------------------------------------------- */
+function EligibilityPanel({ ch }) {
+  const [apps, setApps] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    api.getApplications(ch.id)
+      .then((res) => { if (!cancelled) setApps(res); })
+      .catch((err) => { if (!cancelled) setError(err.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [ch.id]);
+
+  if (loading) return <Card>Running auto-eligibility screening…</Card>;
+  if (error) return <Card style={{ color: C.rust }}>Couldn't reach the eligibility service: {error}. Is the backend running on port 4000?</Card>;
+
+  const needsCert = apps.some((a) => a.results.some((r) => r.key === "cert"));
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 18 }}>
       <Card noPad>
         <div style={{ padding: "14px 16px", fontWeight: 700, borderBottom: `1px solid ${C.line}` }}>Auto-eligibility screening</div>
-        {apps.map((a) => (
-          <div key={a.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", borderTop: `1px solid ${C.line}` }}>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 13.5 }}>{a.name}</div>
-              <div style={{ fontSize: 11.5, color: a.status === "Ineligible" ? C.rust : C.inkSoft }}>
-                {a.status === "Eligible" ? "All checks passed" : `Reason: ${a.missing}`}
+        {apps.length === 0 && (
+          <div style={{ padding: "16px", fontSize: 12.5, color: C.inkSoft }}>
+            No applications yet — invite a startup from the AI Startup Discovery tab to see it screened here.
+          </div>
+        )}
+        {apps.map(({ id, startup: a, results, status, reason }) => (
+          <div key={id} style={{ padding: "13px 16px", borderTop: `1px solid ${C.line}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13.5 }}>{a.name}</div>
+                <div style={{ fontSize: 11.5, color: status === "Auto-Rejected" ? C.rust : C.inkSoft }}>
+                  {status === "Eligible" ? "All checks passed" : status === "Auto-Rejected"
+                    ? `Eligibility check failed — ${reason.toLowerCase()}. Application auto-rejected before evaluation stage.`
+                    : `Reason: ${reason}`}
+                </div>
               </div>
+              <StatusChip label={status === "Eligible" ? "Startup Shortlisted" : status === "Missing Documents" ? "Under Review" : "Auto-Rejected"} small />
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ fontSize: 12.5, color: C.inkSoft }}>Score <b style={{ color: C.ink }}>{a.score}</b>/100</div>
-              <StatusChip label={a.status === "Eligible" ? "Startup Shortlisted" : a.status === "Missing Documents" ? "Under Review" : "Rejected"} small />
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 8 }}>
+              {results.map((r) => (
+                <div key={r.key} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: r.pass ? C.teal : C.rust }}>
+                  {r.pass ? <CheckCircle2 size={13} /> : <X size={13} />} {r.label}
+                </div>
+              ))}
             </div>
           </div>
         ))}
       </Card>
       <Card>
-        <div style={{ fontWeight: 700, marginBottom: 10 }}>Turnover / experience relaxation</div>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Rules applied to this challenge</div>
         <p style={{ fontSize: 12.5, color: C.inkSoft, lineHeight: 1.6, marginBottom: 12 }}>
-          DPIIT-recognised startups under 8 years old are exempt from the standard 3-year prior-turnover requirement,
-          per GoM startup procurement policy.
+          DPIIT-recognised startups under 10 years old are exempt from the standard prior-turnover requirement.
+          {needsCert && " Because this challenge is Medium/High risk, a valid ISO 27001 (or equivalent) security certification is mandatory — applicants without it are auto-rejected before reaching an evaluator."}
         </p>
         <Btn variant="secondary" small icon={Eye} style={{ width: "100%", justifyContent: "center" }}>Side-by-side comparison</Btn>
       </Card>
