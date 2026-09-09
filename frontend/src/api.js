@@ -60,4 +60,28 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ actual }),
     }),
+
+  // Milestone-Based Contracting: draft a contract from a challenge's
+  // already-collected budget, split into a standard milestone schedule.
+  getContracts: (challengeId) => request(`/challenges/${challengeId}/contracts`),
+  createContract: (challengeId, { startupId, durationMonths }) =>
+    request(`/challenges/${challengeId}/contracts`, {
+      method: "POST",
+      body: JSON.stringify({ startupId, durationMonths }),
+    }),
+  updateMilestoneStatus: (contractId, milestoneId, status) =>
+    request(`/contracts/${contractId}/milestones/${milestoneId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+
+  // Sandbox / Pilot Design: scope + duration locked upfront, phases gated
+  // so live citizen data can't be reached before the sandbox phase passes.
+  getPilotDesign: (challengeId) => request(`/challenges/${challengeId}/pilot-design`),
+  createPilotDesign: (challengeId, { startupId, scopeLabel, durationMonths }) =>
+    request(`/challenges/${challengeId}/pilot-design`, {
+      method: "POST",
+      body: JSON.stringify({ startupId, scopeLabel, durationMonths }),
+    }),
+  advancePilotPhase: (pilotDesignId) => request(`/pilot-design/${pilotDesignId}/advance`, { method: "POST" }),
 };

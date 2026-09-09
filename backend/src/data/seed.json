@@ -32,5 +32,19 @@
   "evaluations": [
     { "id": "ev_seed_1", "challengeId": "MH-TR-0022", "startupId": "st_tracknova", "evaluatorName": "Dr. A. Deshmukh", "scores": { "innovation": 8, "feasibility": 9, "cost": 7, "security": 8, "scalability": 9 }, "weights": { "innovation": 23, "feasibility": 23, "cost": 14, "security": 25, "scalability": 15 }, "total": 82.4, "submittedAt": "2026-08-25T09:00:00.000Z" },
     { "id": "ev_seed_2", "challengeId": "MH-TR-0022", "startupId": "st_routewise", "evaluatorName": "Dr. A. Deshmukh", "scores": { "innovation": 7, "feasibility": 6, "cost": 8, "security": 5, "scalability": 6 }, "weights": { "innovation": 23, "feasibility": 23, "cost": 14, "security": 25, "scalability": 15 }, "total": 62.6, "submittedAt": "2026-08-25T09:20:00.000Z" }
+  ],
+  "contracts": [
+    { "id": "ct_seed_1", "challengeId": "MH-TR-0022", "startupId": "st_tracknova", "budgetAmount": 2500000, "budgetDisplay": "₹25 L", "durationMonths": 4, "createdAt": "2026-08-28T09:00:00.000Z", "milestones": [
+      { "id": "ms_seed_1", "key": "sandbox", "name": "Milestone 1 — Sandbox", "percentage": 20, "amount": 500000, "dueDate": "2026-09-28T00:00:00.000Z", "status": "Paid" },
+      { "id": "ms_seed_2", "key": "field", "name": "Milestone 2 — Field test", "percentage": 30, "amount": 750000, "dueDate": "2026-11-28T00:00:00.000Z", "status": "Submitted" },
+      { "id": "ms_seed_3", "key": "report", "name": "Milestone 3 — Report", "percentage": 50, "amount": 1250000, "dueDate": "2026-12-28T00:00:00.000Z", "status": "Draft" }
+    ] }
+  ],
+  "pilotDesigns": [
+    { "id": "pd_seed_1", "challengeId": "MH-TR-0022", "startupId": "st_tracknova", "scopeLabel": "Pune Municipal Transport, routes 12 & 44", "durationMonths": 4, "dataPolicy": "No live citizen data until the Sandbox phase passes.", "lockedAt": "2026-08-28T09:00:00.000Z", "phases": [
+      { "key": "sandbox", "name": "Sandbox", "description": "Isolated environment, synthetic or fully anonymised data only.", "status": "Passed", "passedAt": "2026-09-15T09:00:00.000Z" },
+      { "key": "field", "name": "Field Pilot", "description": "Limited real-world deployment, real data under DPA-covered scope.", "status": "Active" },
+      { "key": "live", "name": "Live Rollout", "description": "Full production rollout with live citizen data.", "status": "Locked" }
+    ] }
   ]
 }

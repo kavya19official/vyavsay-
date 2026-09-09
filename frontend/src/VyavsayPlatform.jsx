@@ -1947,37 +1947,138 @@ function Pilots() {
   );
 }
 
+/* ---------------------------------------------------------------------- */
+/*  SANDBOX / PILOT DESIGN                                                 */
+/*  Scope and duration are locked in before any rollout, and progression   */
+/*  through Sandbox -> Field Pilot -> Live Rollout is gated so nothing     */
+/*  reaches live citizen data until the Sandbox phase has passed.          */
+/*  See backend/src/pilotDesign.js.                                        */
+/* ---------------------------------------------------------------------- */
+const PHASE_DOT_COLOR = { Passed: C.teal, Active: C.brass, Locked: C.line };
+
 function PilotDesign() {
+  const pilotable = CHALLENGES.filter((c) => c.status !== "Under Review" && c.status !== "Draft Challenge");
+  const [challengeId, setChallengeId] = useState(pilotable[0]?.id || "");
+  const [pilot, setPilot] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const [scopeLabel, setScopeLabel] = useState("");
+  const [durationMonths, setDurationMonths] = useState(4);
+  const [locking, setLocking] = useState(false);
+  const [actionError, setActionError] = useState(null);
+  const [advancing, setAdvancing] = useState(false);
+
+  function loadPilot(id) {
+    return api.getPilotDesign(id).then((res) => setPilot(res.pilotDesign));
+  }
+
+  useEffect(() => {
+    if (!challengeId) return;
+    let cancelled = false;
+    setLoading(true);
+    setPilot(null);
+    setActionError(null);
+    loadPilot(challengeId)
+      .catch((err) => { if (!cancelled) setError(err.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [challengeId]);
+
+  async function lockPilot() {
+    setActionError(null);
+    if (!scopeLabel.trim()) { setActionError("Enter a pilot scope, e.g. '1 district'"); return; }
+    setLocking(true);
+    try {
+      await api.createPilotDesign(challengeId, { scopeLabel, durationMonths: Number(durationMonths) || 1 });
+      await loadPilot(challengeId);
+      setScopeLabel("");
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setLocking(false);
+    }
+  }
+
+  async function advance() {
+    if (!pilot) return;
+    setAdvancing(true);
+    setActionError(null);
+    try {
+      const updated = await api.advancePilotPhase(pilot.id);
+      setPilot(updated);
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setAdvancing(false);
+    }
+  }
+
+  const ch = CHALLENGES.find((c) => c.id === challengeId);
+  const activePhaseIdx = pilot ? pilot.phases.findIndex((p) => p.status === "Active") : -1;
+
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-      <Card>
-        <div style={{ fontWeight: 700, marginBottom: 12 }}>Pilot scope — TrackNova / Transport Dept.</div>
-        <Field label="Pilot geography"><input style={inputStyle} defaultValue="Pune Municipal Transport routes 12, 44" /></Field>
-        <Field label="User group"><input style={inputStyle} defaultValue="~4,200 daily commuters" /></Field>
-        <Field label="Duration"><input style={inputStyle} defaultValue="12 weeks" /></Field>
-        <Field label="Success metrics"><textarea style={{ ...inputStyle, height: 60 }} defaultValue="ETA accuracy ≥ 90%; app adoption ≥ 15% of route riders" /></Field>
-        <Field label="Required data access"><input style={inputStyle} defaultValue="Anonymised GPS feed (read-only)" /></Field>
-      </Card>
-      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        <Card>
-          <div style={{ fontWeight: 700, marginBottom: 10 }}>Risk controls & checklist</div>
-          {[
-            { l: "Cybersecurity checklist complete", done: true },
-            { l: "IP / data agreement signed", done: true },
-            { l: "Validation agency assigned", done: true },
-            { l: "Rollback plan documented", done: false },
-          ].map((c) => (
-            <div key={c.l} style={{ display: "flex", gap: 8, fontSize: 12.8, padding: "6px 0", color: c.done ? C.ink : C.rust }}>
-              {c.done ? <CheckCircle2 size={15} color={C.teal} /> : <AlertTriangle size={15} color={C.rust} />} {c.l}
-            </div>
-          ))}
-        </Card>
-        <Card style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: C.inkSoft, marginBottom: 8 }}>PILOT READINESS SCORE</div>
-          <div style={{ ...serif, fontSize: 34, fontWeight: 600 }}>82<span style={{ fontSize: 16, color: C.inkSoft }}>/100</span></div>
-          <Btn variant="brass" small style={{ marginTop: 10 }} icon={ArrowRight}>Send for contracting</Btn>
-        </Card>
-      </div>
+    <div>
+      {pilotable.length > 0 && (
+        <select style={{ ...inputStyle, width: 360, marginBottom: 16 }} value={challengeId} onChange={(e) => setChallengeId(e.target.value)}>
+          {pilotable.map((c) => <option key={c.id} value={c.id}>{c.id} — {c.title}</option>)}
+        </select>
+      )}
+      {loading && <Card>Loading pilot design…</Card>}
+      {error && <Card style={{ color: C.rust }}>Couldn't reach the pilot design service: {error}. Is the backend running on port 4000?</Card>}
+      {!loading && !error && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+          <Card>
+            <div style={{ fontWeight: 700, marginBottom: 12 }}>Pilot scope {ch ? `— ${ch.title}` : ""}</div>
+            {pilot ? (
+              <>
+                <div style={{ fontSize: 12.8, marginBottom: 8 }}><b>Scope:</b> {pilot.scopeLabel}</div>
+                <div style={{ fontSize: 12.8, marginBottom: 12 }}><b>Duration:</b> {pilot.durationMonths} months</div>
+                <div style={{ fontSize: 12, color: C.ink, background: C.brassSoft, padding: "9px 11px", borderRadius: 6, display: "flex", gap: 8, alignItems: "flex-start" }}>
+                  <Lock size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+                  {pilot.dataPolicy}
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: 12, color: C.inkSoft, marginBottom: 12, lineHeight: 1.5 }}>
+                  Scope and duration are locked in before any rollout — every pilot starts in the Sandbox phase.
+                </p>
+                <Field label="Pilot scope"><input style={inputStyle} placeholder="e.g. 1 district" value={scopeLabel} onChange={(e) => setScopeLabel(e.target.value)} /></Field>
+                <Field label="Duration (months)"><input type="number" min="1" style={inputStyle} value={durationMonths} onChange={(e) => setDurationMonths(e.target.value)} /></Field>
+                <Btn small icon={Lock} disabled={locking} onClick={lockPilot}>{locking ? "Locking…" : "Lock pilot scope"}</Btn>
+              </>
+            )}
+            {actionError && <div style={{ fontSize: 12, color: C.rust, marginTop: 10 }}>{actionError}</div>}
+          </Card>
+          <Card>
+            <div style={{ fontWeight: 700, marginBottom: 12 }}>Phase gate</div>
+            {!pilot && <div style={{ fontSize: 12.5, color: C.inkSoft }}>Lock a pilot scope to start the Sandbox → Field Pilot → Live Rollout progression.</div>}
+            {pilot && pilot.phases.map((p, i) => (
+              <div key={p.key} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 0", borderTop: i > 0 ? `1px solid ${C.line}` : "none" }}>
+                <div style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, marginTop: 1, display: "flex", alignItems: "center", justifyContent: "center", background: PHASE_DOT_COLOR[p.status], color: p.status === "Locked" ? C.inkSoft : "#fff" }}>
+                  {p.status === "Passed" ? <CheckCircle2 size={13} /> : p.status === "Locked" ? <Lock size={11} /> : <span style={{ fontSize: 11, fontWeight: 700 }}>{i + 1}</span>}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ fontWeight: 600, fontSize: 12.8 }}>{p.name}</div>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: p.status === "Passed" ? C.teal : p.status === "Active" ? C.brass : C.inkSoft, flexShrink: 0 }}>{p.status}</span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: C.inkSoft }}>{p.description}</div>
+                </div>
+              </div>
+            ))}
+            {pilot && activePhaseIdx !== -1 && (
+              <Btn small variant="brass" style={{ marginTop: 12 }} disabled={advancing} onClick={advance} icon={ArrowRight}>
+                {advancing ? "Advancing…" : `Mark ${pilot.phases[activePhaseIdx].name} passed`}
+              </Btn>
+            )}
+            {pilot && activePhaseIdx === -1 && (
+              <div style={{ fontSize: 12, color: C.teal, fontWeight: 600, marginTop: 12 }}>All phases complete — cleared for full rollout.</div>
+            )}
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
@@ -2137,39 +2238,168 @@ function MilestoneMini() {
 
 /* ---------------------------------------------------------------------- */
 /*  CONTRACTS                                                              */
+/*  Milestone-Based Contracting — once a startup is selected, pulls in     */
+/*  the problem, score, and budget already collected on the challenge and  */
+/*  splits payment into stages instead of drafting a contract by hand.     */
+/*  See backend/src/contracting.js.                                        */
 /* ---------------------------------------------------------------------- */
+const MILESTONE_STATUSES = ["Draft", "Submitted", "Payment Approved", "Paid"];
+const MILESTONE_STATUS_COLOR = { Draft: C.inkSoft, Submitted: C.brass, "Payment Approved": C.ink, Paid: C.teal };
+
+function formatINRDisplay(amount) {
+  if (amount == null) return "TBD";
+  if (amount >= 1e7) return `₹${(amount / 1e7).toFixed(2).replace(/\.00$/, "")} Cr`;
+  if (amount >= 1e5) return `₹${(amount / 1e5).toFixed(2).replace(/\.00$/, "")} L`;
+  return `₹${amount.toLocaleString("en-IN")}`;
+}
+
 function Contracts() {
+  const contractable = CHALLENGES.filter((c) => c.status !== "Under Review" && c.status !== "Draft Challenge");
+  const [challengeId, setChallengeId] = useState(contractable[0]?.id || "");
+  const [contracts, setContracts] = useState(null);
+  const [startups, setStartups] = useState([]);
+  const [topRanked, setTopRanked] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const [startupId, setStartupId] = useState("");
+  const [durationMonths, setDurationMonths] = useState(4);
+  const [drafting, setDrafting] = useState(false);
+  const [draftError, setDraftError] = useState(null);
+
+  function load(id) {
+    return api.getContracts(id).then((res) => setContracts(res.contracts));
+  }
+
+  useEffect(() => {
+    if (!challengeId) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setStartupId("");
+    Promise.all([
+      load(challengeId),
+      api.getStartups().then((res) => { if (!cancelled) setStartups(res); }),
+      api.getEvaluations(challengeId).then((res) => { if (!cancelled) setTopRanked(res.ranking?.[0] || null); }),
+    ])
+      .catch((err) => { if (!cancelled) setError(err.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [challengeId]);
+
+  async function draftContract() {
+    setDraftError(null);
+    const chosenId = startupId || topRanked?.startupId;
+    if (!chosenId) { setDraftError("Choose a startup to contract"); return; }
+    setDrafting(true);
+    try {
+      await api.createContract(challengeId, { startupId: chosenId, durationMonths: Number(durationMonths) || 4 });
+      await load(challengeId);
+      setStartupId("");
+    } catch (err) {
+      setDraftError(err.message);
+    } finally {
+      setDrafting(false);
+    }
+  }
+
+  async function advanceMilestone(contractId, milestoneId, currentStatus) {
+    const idx = MILESTONE_STATUSES.indexOf(currentStatus);
+    const next = MILESTONE_STATUSES[Math.min(idx + 1, MILESTONE_STATUSES.length - 1)];
+    if (next === currentStatus) return;
+    await api.updateMilestoneStatus(contractId, milestoneId, next);
+    await load(challengeId);
+  }
+
+  const ch = CHALLENGES.find((c) => c.id === challengeId);
+
   return (
     <div>
-      <SectionTitle eyebrow="MILESTONE-BASED CONTRACTING" title="Contracts — TrackNova / SIH-MH-TR-0022" right={<Btn icon={FileSignature} small variant="secondary">Contract v2 · e-signed</Btn>} />
-      <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 18 }}>
-        <Card noPad>
-          <div style={{ padding: "13px 16px", fontWeight: 700, borderBottom: `1px solid ${C.line}` }}>Milestones & deliverables</div>
-          {MILESTONES.map((m) => (
-            <div key={m.n} style={{ padding: "13px 16px", borderTop: `1px solid ${C.line}` }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{m.n}</div>
-                <StatusChip label={m.status} small />
+      <SectionTitle
+        eyebrow="MILESTONE-BASED CONTRACTING"
+        title="Contracts"
+        right={contractable.length > 0 && (
+          <select style={{ ...inputStyle, width: 340 }} value={challengeId} onChange={(e) => setChallengeId(e.target.value)}>
+            {contractable.map((c) => <option key={c.id} value={c.id}>{c.id} — {c.title}</option>)}
+          </select>
+        )}
+      />
+      {loading && <Card>Loading contracts…</Card>}
+      {error && <Card style={{ color: C.rust }}>Couldn't reach the contracting service: {error}. Is the backend running on port 4000?</Card>}
+      {!loading && !error && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 18 }}>
+          <div>
+            <Card noPad>
+              <div style={{ padding: "13px 16px", fontWeight: 700, borderBottom: `1px solid ${C.line}` }}>
+                Milestones & deliverables {ch ? `— ${ch.title}` : ""}
               </div>
-              <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 4 }}>Due {m.due} · Payment {m.amt}</div>
-            </div>
-          ))}
-        </Card>
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <Card>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Legal / procurement review</div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.8, marginBottom: 6 }}><span>Clauses cleared</span><CheckCircle2 size={15} color={C.teal} /></div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.8 }}><span>Procurement pathway confirmed</span><CheckCircle2 size={15} color={C.teal} /></div>
-          </Card>
-          <Card>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Version history</div>
-            {["v2 — payment terms revised (28 Aug)", "v1 — initial draft from template (14 Aug)"].map((v) => (
-              <div key={v} style={{ fontSize: 12, color: C.inkSoft, padding: "5px 0" }}>· {v}</div>
-            ))}
-          </Card>
-          <Btn variant="secondary" icon={Download} style={{ justifyContent: "center" }}>Download signed agreement</Btn>
+              {contracts.length === 0 && (
+                <div style={{ padding: 16, fontSize: 12.5, color: C.inkSoft }}>
+                  No contract drafted yet — pick a selected startup on the right to auto-draft one from the challenge budget.
+                </div>
+              )}
+              {contracts.map((c) => (
+                <div key={c.id} style={{ padding: "14px 16px", borderTop: `1px solid ${C.line}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>{c.startupName}</div>
+                    <div style={{ fontSize: 12, color: C.inkSoft }}>{c.budgetDisplay} · {c.durationMonths} months</div>
+                  </div>
+                  <div style={{ height: 6, background: C.paper, borderRadius: 3, overflow: "hidden", marginBottom: 10 }}>
+                    <div style={{ width: `${c.progress.paidPercentage}%`, height: "100%", background: C.teal }} />
+                  </div>
+                  <div style={{ fontSize: 11.5, color: C.inkSoft, marginBottom: 10 }}>
+                    {c.progress.paidDisplay} paid of {c.progress.totalDisplay} ({c.progress.paidPercentage}%)
+                  </div>
+                  {c.milestones.map((m) => (
+                    <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderTop: `1px solid ${C.line}` }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{m.name} — {m.percentage}%</div>
+                        <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 3 }}>
+                          Due {new Date(m.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} · Payment {formatINRDisplay(m.amount)}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: MILESTONE_STATUS_COLOR[m.status] }}>{m.status}</span>
+                        {m.status !== "Paid" && (
+                          <Btn small variant="secondary" onClick={() => advanceMilestone(c.id, m.id, m.status)}>
+                            Mark {MILESTONE_STATUSES[MILESTONE_STATUSES.indexOf(m.status) + 1]}
+                          </Btn>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </Card>
+          </div>
+          <div>
+            <Card>
+              <div style={{ fontWeight: 700, marginBottom: 10 }}>Draft a new contract</div>
+              <p style={{ fontSize: 12, color: C.inkSoft, marginBottom: 12, lineHeight: 1.5 }}>
+                Pulls in the problem, score, and budget already collected on this challenge and splits payment into the standard milestone schedule (20% / 30% / 50%).
+              </p>
+              {topRanked && (
+                <div style={{ fontSize: 11.5, color: C.inkSoft, marginBottom: 10, background: C.tealSoft, padding: "7px 9px", borderRadius: 4 }}>
+                  Top-ranked from Expert Evaluation: <b style={{ color: C.ink }}>{topRanked.startupName}</b> ({topRanked.avgTotal}/100)
+                </div>
+              )}
+              <Field label="Selected startup">
+                <select style={inputStyle} value={startupId} onChange={(e) => setStartupId(e.target.value)}>
+                  <option value="">{topRanked ? `Use top-ranked (${topRanked.startupName})` : "Select a startup…"}</option>
+                  {startups.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Pilot duration (months)" hint={ch ? `Challenge budget: ${ch.budget}` : ""}>
+                <input type="number" min="1" style={inputStyle} value={durationMonths} onChange={(e) => setDurationMonths(e.target.value)} />
+              </Field>
+              <Btn small icon={FileSignature} style={{ width: "100%", justifyContent: "center" }} disabled={drafting} onClick={draftContract}>
+                {drafting ? "Drafting…" : "Draft contract"}
+              </Btn>
+              {draftError && <div style={{ fontSize: 12, color: C.rust, marginTop: 8 }}>{draftError}</div>}
+            </Card>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

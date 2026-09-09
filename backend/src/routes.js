@@ -6,6 +6,8 @@ import { runEligibilityCheck } from "./eligibility.js";
 import { structureRequirement } from "./structuring.js";
 import { weightsForChallenge, rubricMessage, validateScores, computeTotal, rankEvaluations } from "./evaluation.js";
 import { computePilotPerformance, validateKpiTarget } from "./performance.js";
+import { generateContract, contractProgress, MILESTONE_STATUSES } from "./contracting.js";
+import { validatePilotDesign, createPilotDesign, advancePhase } from "./pilotDesign.js";
 
 const router = Router();
 
@@ -56,6 +58,18 @@ function decoratePilot(pilot, db) {
 
 function findPilot(db, id) {
   return (db.pilots || []).find((p) => p.id === id);
+}
+
+/** Attach the startup name and rolled-up payment progress to a raw contract record. */
+function decorateContract(contract, db) {
+  const startup = findStartup(db, contract.startupId);
+  return { ...contract, startupName: startup ? startup.name : "Unknown startup", progress: contractProgress(contract.milestones) };
+}
+
+/** Attach the startup name to a raw pilot design record. */
+function decoratePilotDesign(pd, db) {
+  const startup = pd.startupId ? findStartup(db, pd.startupId) : null;
+  return { ...pd, startupName: startup ? startup.name : null };
 }
 
 router.get("/health", (_req, res) => res.json({ ok: true }));
@@ -342,6 +356,121 @@ router.patch("/pilots/:id/kpis/:key", (req, res) => {
   res.json(decoratePilot(pilot, db));
 });
 
+/* --------------------- Milestone-Based Contracting ----------------------- */
+// Once a startup is selected, draft a contract from everything already
+// collected on the challenge (budget) plus a duration, split into a
+// standard milestone payment schedule instead of drafting one by hand.
+router.get("/challenges/:id/contracts", (req, res) => {
+  const db = readDB();
+  const challenge = findChallenge(db, req.params.id);
+  if (!challenge) return res.status(404).json({ error: "Challenge not found" });
+
+  const contracts = (db.contracts || [])
+    .filter((c) => c.challengeId === challenge.id)
+    .map((c) => decorateContract(c, db))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  res.json({ challengeId: challenge.id, contracts });
+});
+
+router.post("/challenges/:id/contracts", (req, res) => {
+  const db = readDB();
+  const challenge = findChallenge(db, req.params.id);
+  if (!challenge) return res.status(404).json({ error: "Challenge not found" });
+
+  const { startupId, durationMonths, budgetOverride } = req.body || {};
+  const startup = findStartup(db, startupId);
+  if (!startup) return res.status(400).json({ error: "Unknown startupId" });
+  if (durationMonths !== undefined && (typeof durationMonths !== "number" || durationMonths <= 0)) {
+    return res.status(400).json({ error: "durationMonths must be a positive number" });
+  }
+
+  const draft = generateContract({ challenge, durationMonths, budgetOverride });
+  const contract = {
+    id: `ct_${randomUUID()}`,
+    challengeId: challenge.id,
+    startupId,
+    ...draft,
+    createdAt: new Date().toISOString(),
+  };
+
+  db.contracts = db.contracts || [];
+  db.contracts.push(contract);
+  writeDB(db);
+
+  res.status(201).json(decorateContract(contract, db));
+});
+
+// Advance a milestone through Draft -> Submitted -> Payment Approved ->
+// Paid, tying payment directly to real progress.
+router.patch("/contracts/:contractId/milestones/:milestoneId", (req, res) => {
+  const db = readDB();
+  const contract = (db.contracts || []).find((c) => c.id === req.params.contractId);
+  if (!contract) return res.status(404).json({ error: "Contract not found" });
+
+  const milestone = contract.milestones.find((m) => m.id === req.params.milestoneId);
+  if (!milestone) return res.status(404).json({ error: "Milestone not found" });
+
+  const { status } = req.body || {};
+  if (!MILESTONE_STATUSES.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${MILESTONE_STATUSES.join(", ")}` });
+  }
+
+  milestone.status = status;
+  writeDB(db);
+
+  res.json(decorateContract(contract, db));
+});
+
+/* --------------------- Sandbox / Pilot Design ---------------------------- */
+// Before any large rollout, lock the pilot's scope and duration upfront and
+// gate progression so nothing reaches live citizen data until the sandbox
+// phase has passed.
+router.get("/challenges/:id/pilot-design", (req, res) => {
+  const db = readDB();
+  const challenge = findChallenge(db, req.params.id);
+  if (!challenge) return res.status(404).json({ error: "Challenge not found" });
+
+  const pd = (db.pilotDesigns || []).find((p) => p.challengeId === challenge.id) || null;
+  res.json({ challengeId: challenge.id, pilotDesign: pd ? decoratePilotDesign(pd, db) : null });
+});
+
+router.post("/challenges/:id/pilot-design", (req, res) => {
+  const db = readDB();
+  const challenge = findChallenge(db, req.params.id);
+  if (!challenge) return res.status(404).json({ error: "Challenge not found" });
+
+  db.pilotDesigns = db.pilotDesigns || [];
+  if (db.pilotDesigns.some((p) => p.challengeId === challenge.id)) {
+    return res.status(409).json({ error: "A pilot design is already locked for this challenge" });
+  }
+
+  const { startupId, scopeLabel, durationMonths } = req.body || {};
+  const error = validatePilotDesign({ scopeLabel, durationMonths });
+  if (error) return res.status(400).json({ error });
+  if (startupId && !findStartup(db, startupId)) return res.status(400).json({ error: "Unknown startupId" });
+
+  const pd = createPilotDesign({ challengeId: challenge.id, startupId, scopeLabel, durationMonths });
+  db.pilotDesigns.push(pd);
+  writeDB(db);
+
+  res.status(201).json(decoratePilotDesign(pd, db));
+});
+
+// Mark the current active phase as passed and unlock the next one — the
+// only way a pilot can progress toward a live rollout.
+router.post("/pilot-design/:id/advance", (req, res) => {
+  const db = readDB();
+  const pd = (db.pilotDesigns || []).find((p) => p.id === req.params.id);
+  if (!pd) return res.status(404).json({ error: "Pilot design not found" });
+
+  const result = advancePhase(pd);
+  if (result.error) return res.status(400).json({ error: result.error });
+
+  writeDB(db);
+  res.json(decoratePilotDesign(result.pilotDesign, db));
+});
+
 /* --------------------------------- Admin -------------------------------- */
 // Resets the demo data store back to its seed state.
 router.post("/admin/reset", (_req, res) => {
@@ -353,6 +482,8 @@ router.post("/admin/reset", (_req, res) => {
     applications: db.applications.length,
     evaluations: (db.evaluations || []).length,
     pilots: (db.pilots || []).length,
+    contracts: (db.contracts || []).length,
+    pilotDesigns: (db.pilotDesigns || []).length,
   });
 });
 
