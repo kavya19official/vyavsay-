@@ -6,7 +6,7 @@ import {
   AlertTriangle, MapPin, Calendar, Building2, Users, Star, Download, Upload,
   Eye, X, ChevronRight, BadgeCheck, Landmark, FileCheck2, IndianRupee,
   ShieldAlert, UserCheck, Layers, ScrollText, Gauge, ArrowUpRight, Info,
-  ChevronLeft, Sparkles, Lock,
+  ChevronLeft, Sparkles, Lock, Globe,
 } from "lucide-react";
 import { api } from "./api.js";
 
@@ -858,7 +858,7 @@ export default function App() {
           {view === "dashboard" && <Dashboard role={role} onOpenChallenge={goDetail} setView={setView} />}
           {view === "challenges" && <ChallengesList onOpen={goDetail} onCreate={() => setView("create-challenge")} />}
           {view === "challenge-detail" && <ChallengeDetail ch={selectedChallenge || CHALLENGES[0]} onBack={() => setView("challenges")} />}
-          {view === "create-challenge" && <CreateChallenge onDone={() => setView("challenges")} />}
+          {view === "create-challenge" && <CreateChallenge onDone={(newCh) => { if (newCh) { setSelectedChallenge(newCh); setView("challenge-detail"); } else { setView("challenges"); } }} />}
           {view === "marketplace" && <Marketplace />}
           {view === "evaluation" && <EvaluationWorkspace />}
           {view === "pilots" && <Pilots />}
@@ -1021,8 +1021,20 @@ function ChallengeTable({ rows, onOpen, compact }) {
 /* ---------------------------------------------------------------------- */
 function ChallengesList({ onOpen, onCreate }) {
   const [filter, setFilter] = useState("All");
+  const [challenges, setChallenges] = useState(CHALLENGES);
+  const [loading, setLoading] = useState(true);
   const filters = ["All", "Applications Open", "Expert Evaluation", "Pilot Active", "Independent Validation"];
-  const rows = filter === "All" ? CHALLENGES : CHALLENGES.filter((c) => c.status === filter);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getChallenges()
+      .then((res) => { if (!cancelled) setChallenges(res); })
+      .catch(() => { /* backend unreachable — keep the static demo list */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const rows = filter === "All" ? challenges : challenges.filter((c) => c.status === filter);
 
   return (
     <div>
@@ -1039,6 +1051,7 @@ function ChallengesList({ onOpen, onCreate }) {
           </div>
         ))}
         <div style={{ flex: 1 }} />
+        {loading && <span style={{ fontSize: 11.5, color: C.inkSoft, alignSelf: "center" }}>Loading live challenges…</span>}
         <Btn variant="secondary" icon={Filter} small>More filters</Btn>
       </div>
       <Card noPad>
@@ -1100,11 +1113,27 @@ function ChallengeDetail({ ch, onBack }) {
           <div>
             <Card style={{ marginBottom: 16 }}>
               <div style={{ fontWeight: 700, marginBottom: 8 }}>Problem summary</div>
-              <p style={{ fontSize: 13, color: C.inkSoft, lineHeight: 1.6 }}>
-                Conventional procurement is designed for standardised goods and established vendors, making it hard
-                for departments to test and adopt novel startup technology. This challenge seeks a transparent,
-                milestone-based pathway from problem definition to validated, scalable deployment.
-              </p>
+              {ch.requirementStatement ? (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10.5, fontWeight: 700, color: C.violet, marginBottom: 6 }}>
+                    <Sparkles size={12} /> AI-STRUCTURED REQUIREMENT
+                  </div>
+                  <p style={{ fontSize: 13, color: C.ink, lineHeight: 1.6, fontWeight: 500 }}>{ch.requirementStatement}</p>
+                  {ch.capabilities?.length > 0 && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                      {ch.capabilities.map((c) => (
+                        <span key={c} style={{ fontSize: 11, fontWeight: 600, color: C.inkSoft, border: `1px solid ${C.lineStrong}`, borderRadius: 20, padding: "2px 9px" }}>{c}</span>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p style={{ fontSize: 13, color: C.inkSoft, lineHeight: 1.6 }}>
+                  Conventional procurement is designed for standardised goods and established vendors, making it hard
+                  for departments to test and adopt novel startup technology. This challenge seeks a transparent,
+                  milestone-based pathway from problem definition to validated, scalable deployment.
+                </p>
+              )}
               <div style={{ fontWeight: 700, marginTop: 14, marginBottom: 8 }}>Expected measurable outcome</div>
               <p style={{ fontSize: 13, color: C.inkSoft, lineHeight: 1.6 }}>
                 Reduce time from challenge publication to pilot launch to under 30 days, with ≥ 80% of pilots reaching
@@ -1239,7 +1268,14 @@ function StartupDiscoveryPanel({ ch }) {
                     <Rocket size={15} color={C.ink} />
                   </div>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 13.5 }}>{s.name}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13.5, display: "flex", alignItems: "center", gap: 6 }}>
+                      {s.name}
+                      {s.source === "DPIIT Startup India (real)" && (
+                        <span style={{ fontSize: 9.5, fontWeight: 700, color: C.teal, border: `1px solid ${C.teal}55`, borderRadius: 3, padding: "1px 5px" }}>
+                          DPIIT VERIFIED
+                        </span>
+                      )}
+                    </div>
                     <div style={{ fontSize: 11.5, color: C.inkSoft }}>{s.sector} · {s.trl} · {s.govtExperience} past govt. pilots</div>
                   </div>
                 </div>
@@ -1263,6 +1299,16 @@ function StartupDiscoveryPanel({ ch }) {
                   <div style={{ fontSize: 12, color: C.inkSoft, display: "flex", alignItems: "center", gap: 4 }}>
                     <Gauge size={13} color={C.teal} /> Technology readiness {s.trl}
                   </div>
+                  {s.cin && (
+                    <div style={{ fontSize: 12, color: C.inkSoft, display: "flex", alignItems: "center", gap: 4 }}>
+                      <ShieldCheck size={13} color={C.teal} /> CIN {s.cin}
+                    </div>
+                  )}
+                  {s.website && (
+                    <a href={s.website} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: C.navy, display: "flex", alignItems: "center", gap: 4, textDecoration: "none" }}>
+                      <Globe size={13} /> {s.website.replace(/^https?:\/\//, "")}
+                    </a>
+                  )}
                   <Btn
                     small
                     variant={invited === "sent" ? "secondary" : "primary"}
@@ -1320,7 +1366,14 @@ function EligibilityPanel({ ch }) {
           <div key={id} style={{ padding: "13px 16px", borderTop: `1px solid ${C.line}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <div style={{ fontWeight: 600, fontSize: 13.5 }}>{a.name}</div>
+                <div style={{ fontWeight: 600, fontSize: 13.5, display: "flex", alignItems: "center", gap: 6 }}>
+                  {a.name}
+                  {a.source === "DPIIT Startup India (real)" && (
+                    <span style={{ fontSize: 9.5, fontWeight: 700, color: C.teal, border: `1px solid ${C.teal}55`, borderRadius: 3, padding: "1px 5px" }}>
+                      DPIIT VERIFIED
+                    </span>
+                  )}
+                </div>
                 <div style={{ fontSize: 11.5, color: status === "Auto-Rejected" ? C.rust : C.inkSoft }}>
                   {status === "Eligible" ? "All checks passed" : status === "Auto-Rejected"
                     ? `Eligibility check failed — ${reason.toLowerCase()}. Application auto-rejected before evaluation stage.`
@@ -1601,16 +1654,57 @@ function CreateChallenge({ onDone }) {
   const steps = ["Problem", "Outcome & Constraints", "Pilot Parameters", "Review & Publish"];
   const [step, setStep] = useState(0);
   const [f, setF] = useState({
-    title: "", objective: "", beneficiaries: "", painPoint: "",
+    title: "", department: "", objective: "", beneficiaries: "", painPoint: "",
     outcome: "", constraints: "", budget: "", location: "", data: "Available (anonymised)",
     integrations: "", risk: "Medium",
   });
+  const [structured, setStructured] = useState(null);
+  const [structuring, setStructuring] = useState(false);
+  const [structureError, setStructureError] = useState(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState(null);
+
   const completeness = useMemo(() => {
     const fields = Object.values(f);
     const filled = fields.filter((v) => v && v.length > 3).length;
     return Math.round((filled / fields.length) * 100);
   }, [f]);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+
+  async function generateRequirement() {
+    setStructuring(true);
+    setStructureError(null);
+    try {
+      const result = await api.structureRequirement(f);
+      setStructured(result);
+    } catch (err) {
+      setStructureError(err.message);
+    } finally {
+      setStructuring(false);
+    }
+  }
+
+  async function publish() {
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const challenge = await api.createChallenge({
+        title: f.title,
+        dept: f.department,
+        budget: f.budget,
+        risk: f.risk,
+        location: f.location,
+        theme: structured?.theme,
+        requirementStatement: structured?.requirementStatement,
+        capabilities: structured?.capabilities,
+      });
+      onDone(challenge);
+    } catch (err) {
+      setPublishError(err.message);
+    } finally {
+      setPublishing(false);
+    }
+  }
 
   return (
     <div>
@@ -1636,10 +1730,41 @@ function CreateChallenge({ onDone }) {
                 <div style={{ display: "flex", alignItems: "center", gap: 6, background: C.brassSoft, color: C.brass, padding: "8px 12px", borderRadius: 4, fontSize: 12, marginBottom: 16 }}>
                   <Sparkles size={14} /> AI drafting suggestion: describe the pain point in citizen/beneficiary terms, not system terms — this improves outcome-based framing.
                 </div>
+                <Field label="Department"><input style={inputStyle} value={f.department} onChange={set("department")} placeholder="e.g. Urban Development" /></Field>
                 <Field label="Problem statement title"><input style={inputStyle} value={f.title} onChange={set("title")} placeholder="e.g. Real-time public transport tracking" /></Field>
                 <Field label="Department objective"><textarea style={{ ...inputStyle, height: 70 }} value={f.objective} onChange={set("objective")} placeholder="What is the department ultimately trying to achieve?" /></Field>
                 <Field label="Target beneficiaries"><input style={inputStyle} value={f.beneficiaries} onChange={set("beneficiaries")} placeholder="e.g. Daily commuters in Tier-2 cities" /></Field>
-                <Field label="Current pain point" hint="Describe the symptom citizens/officials actually experience today."><textarea style={{ ...inputStyle, height: 70 }} value={f.painPoint} onChange={set("painPoint")} /></Field>
+                <Field label="Current pain point" hint="Describe the symptom citizens/officials actually experience today — in free text, exactly as you'd say it out loud."><textarea style={{ ...inputStyle, height: 70 }} value={f.painPoint} onChange={set("painPoint")} placeholder="e.g. Our files frequently get lost during inter-department transfers." /></Field>
+
+                <Btn variant="secondary" small icon={Sparkles} onClick={generateRequirement} disabled={structuring}>
+                  {structuring ? "Structuring…" : structured ? "Regenerate structured requirement" : "Generate structured requirement"}
+                </Btn>
+
+                {structureError && (
+                  <div style={{ marginTop: 12, fontSize: 12, color: C.rust }}>
+                    Couldn't reach the structuring service: {structureError}. Is the backend running on port 4000?
+                  </div>
+                )}
+
+                {structured && structured.requirementStatement && (
+                  <div style={{ marginTop: 14, padding: 14, borderRadius: 6, background: C.violetSoft, border: `1px solid ${C.violet}22` }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                      <Sparkles size={15} color={C.violet} style={{ marginTop: 1, flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: C.inkSoft, letterSpacing: 0.4 }}>
+                          STANDARD PROBLEM STATEMENT {structured.confidence === "low" && "· low confidence, please refine"}
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: 13.5, marginTop: 3 }}>Requirement: {structured.requirementStatement}</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                          <StatusChip label={structured.theme} small />
+                          {structured.capabilities.map((c) => (
+                            <span key={c} style={{ fontSize: 11, fontWeight: 600, color: C.inkSoft, border: `1px solid ${C.lineStrong}`, borderRadius: 20, padding: "2px 9px" }}>{c}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </>
             )}
             {step === 1 && (
@@ -1672,12 +1797,25 @@ function CreateChallenge({ onDone }) {
             {step === 3 && (
               <>
                 <div style={{ fontWeight: 700, marginBottom: 10 }}>Review before publishing</div>
+                {!structured?.requirementStatement && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, background: C.brassSoft, color: C.brass, padding: "8px 12px", borderRadius: 4, fontSize: 12, marginBottom: 14 }}>
+                    <AlertTriangle size={14} /> No structured requirement generated yet — go back to Step 1 and click "Generate structured requirement" so AI Startup Discovery can match this correctly.
+                  </div>
+                )}
+                {structured?.requirementStatement && (
+                  <div style={{ marginBottom: 14, padding: 12, borderRadius: 6, background: C.violetSoft, border: `1px solid ${C.violet}22`, fontSize: 13 }}>
+                    <b>Requirement:</b> {structured.requirementStatement} <span style={{ color: C.inkSoft }}>({structured.theme})</span>
+                  </div>
+                )}
                 {Object.entries(f).map(([k, v]) => (
                   <div key={k} style={{ display: "flex", padding: "7px 0", borderTop: `1px solid ${C.line}`, fontSize: 12.8 }}>
                     <div style={{ width: 170, color: C.inkSoft, textTransform: "capitalize" }}>{k.replace(/([A-Z])/g, " $1")}</div>
                     <div style={{ fontWeight: 500 }}>{v || "—"}</div>
                   </div>
                 ))}
+                {publishError && (
+                  <div style={{ marginTop: 12, fontSize: 12, color: C.rust }}>Couldn't publish: {publishError}</div>
+                )}
               </>
             )}
 
@@ -1685,7 +1823,7 @@ function CreateChallenge({ onDone }) {
               <Btn variant="ghost" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}>Back</Btn>
               {step < steps.length - 1
                 ? <Btn icon={ArrowRight} onClick={() => setStep(step + 1)}>Continue</Btn>
-                : <Btn variant="brass" icon={CheckCircle2} onClick={onDone}>Publish Challenge</Btn>}
+                : <Btn variant="brass" icon={CheckCircle2} onClick={publish} disabled={publishing || !f.title.trim()}>{publishing ? "Publishing…" : "Publish Challenge"}</Btn>}
             </div>
           </Card>
         </div>

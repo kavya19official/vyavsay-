@@ -27,6 +27,8 @@ async function request(path, options) {
 export const api = {
   getChallenges: () => request("/challenges"),
   getChallenge: (id) => request(`/challenges/${id}`),
+  createChallenge: (payload) => request("/challenges", { method: "POST", body: JSON.stringify(payload) }),
+  structureRequirement: (fields) => request("/requirements/structure", { method: "POST", body: JSON.stringify(fields) }),
   getStartups: () => request("/startups"),
   getDiscovery: (challengeId) => request(`/challenges/${challengeId}/discovery`),
   getApplications: (challengeId) => request(`/challenges/${challengeId}/applications`),

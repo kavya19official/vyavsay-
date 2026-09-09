@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readDB, writeDB, resetDB } from "./db.js";
 import { matchStartupsForChallenge } from "./matching.js";
 import { runEligibilityCheck } from "./eligibility.js";
+import { structureRequirement } from "./structuring.js";
 import { weightsForChallenge, rubricMessage, validateScores, computeTotal, rankEvaluations } from "./evaluation.js";
 
 const router = Router();
@@ -29,6 +30,18 @@ function decorateEvaluation(ev, db) {
   return { ...ev, startupName: startup ? startup.name : "Unknown startup" };
 }
 
+function slugChallengeId(title, existingIds) {
+  const base = "CH-" + (title || "challenge")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24);
+  let id = base;
+  let n = 2;
+  while (existingIds.has(id)) id = `${base}-${n++}`;
+  return id;
+}
+
 router.get("/health", (_req, res) => res.json({ ok: true }));
 
 /* ------------------------------- Startups ------------------------------ */
@@ -48,6 +61,47 @@ router.get("/challenges/:id", (req, res) => {
   const challenge = findChallenge(db, req.params.id);
   if (!challenge) return res.status(404).json({ error: "Challenge not found" });
   res.json(challenge);
+});
+
+/* ------------------- Feature 0: Challenge Identification ---------------- */
+// Turns a department's free-form problem description into a standard,
+// structured requirement statement instead of a free-form request. Stateless
+// — call as many times as the department edits their draft.
+router.post("/requirements/structure", (req, res) => {
+  const { title, objective, beneficiaries, painPoint, outcome, constraints } = req.body || {};
+  const result = structureRequirement({ title, objective, beneficiaries, painPoint, outcome, constraints });
+  res.json(result);
+});
+
+// Publishes a new challenge (department fills the structured form -> this
+// persists it, using the theme/requirement generated above). Every challenge
+// created this way immediately works with AI Startup Discovery and
+// Auto-Eligibility Screening, since those key off the same `theme`/`risk`
+// fields as the seeded demo challenges.
+router.post("/challenges", (req, res) => {
+  const db = readDB();
+  const { title, dept, budget, risk, theme, requirementStatement, capabilities, deadline, location } = req.body || {};
+  if (!title || !title.trim()) return res.status(400).json({ error: "title is required" });
+
+  const existingIds = new Set(db.challenges.map((c) => c.id));
+  const challenge = {
+    id: slugChallengeId(title, existingIds),
+    title: title.trim(),
+    dept: dept?.trim() || "Unassigned Department",
+    status: "Applications Open",
+    apps: 0,
+    budget: budget?.trim() || "TBD",
+    deadline: deadline?.trim() || "Draft",
+    theme: theme || "Miscellaneous",
+    risk: risk || "Medium",
+    requirementStatement: requirementStatement || null,
+    capabilities: capabilities || [],
+    location: location?.trim() || null,
+  };
+
+  db.challenges.push(challenge);
+  writeDB(db);
+  res.status(201).json(challenge);
 });
 
 /* --------------------- Feature 1: AI Startup Discovery ------------------ */

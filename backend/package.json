@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "import:dpiit": "node scripts/import-dpiit.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
+    "csv-parse": "^5.5.6",
     "express": "^4.19.2"
   }
 }
