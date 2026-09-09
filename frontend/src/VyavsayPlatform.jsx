@@ -1,3 +1,4 @@
+import PaymentsWorkspace from "./PaymentsWorkspace.jsx";
 import React, { useState, useMemo, useEffect } from "react";
 import {
   LayoutDashboard, Target, Rocket, FileText, ClipboardCheck, FlaskConical,
@@ -832,15 +833,15 @@ export default function App() {
           <div style={{ flex: 1 }} />
           <Bell size={17} color={C.inkSoft} style={{ cursor: "pointer" }} />
           <div style={{ position: "relative" }}>
-            <div onClick={() => setRoleMenuOpen((s) => !s)}
+            <div onClick={() => { if (view !== "payments") setRoleMenuOpen((s) => !s); }}
               style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer", border: `1px solid ${C.line}`, borderRadius: 4, padding: "6px 10px" }}>
               <div style={{ width: 22, height: 22, borderRadius: "50%", background: C.brassSoft, color: C.brass, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>
-                {role[0]}
+                {view === "payments" ? "P" : role[0]}
               </div>
-              <div style={{ fontSize: 12.5, fontWeight: 600 }}>{role}</div>
-              <ChevronDown size={14} color={C.inkSoft} />
+              <div style={{ fontSize: 12.5, fontWeight: 600 }}>{view === "payments" ? "Payment workspace" : role}</div>
+              {view !== "payments" && <ChevronDown size={14} color={C.inkSoft} />}
             </div>
-            {roleMenuOpen && (
+            {view !== "payments" && roleMenuOpen && (
               <div style={{ position: "absolute", right: 0, top: 38, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 5, width: 200, boxShadow: "0 6px 18px rgba(20,33,61,0.1)", zIndex: 20 }}>
                 <div style={{ padding: "8px 12px", fontSize: 10.5, color: C.inkSoft, fontWeight: 700, borderBottom: `1px solid ${C.line}` }}>VIEW PLATFORM AS</div>
                 {ROLES.map((r) => (
@@ -862,8 +863,8 @@ export default function App() {
           {view === "marketplace" && <Marketplace />}
           {view === "evaluation" && <EvaluationWorkspace />}
           {view === "pilots" && <Pilots />}
-          {view === "contracts" && <Contracts />}
-          {view === "payments" && <Payments />}
+          {view === "contracts" && <Contracts onPayments={() => setView("payments")} />}
+          {view === "payments" && <PaymentsWorkspace />}
           {view === "validation" && <Validation />}
           {view === "scaleup" && <ScaleUp />}
           {view === "templates" && <Templates />}
@@ -2253,7 +2254,7 @@ function formatINRDisplay(amount) {
   return `₹${amount.toLocaleString("en-IN")}`;
 }
 
-function Contracts() {
+function Contracts({ onPayments }) {
   const contractable = CHALLENGES.filter((c) => c.status !== "Under Review" && c.status !== "Draft Challenge");
   const [challengeId, setChallengeId] = useState(contractable[0]?.id || "");
   const [contracts, setContracts] = useState(null);
@@ -2303,14 +2304,6 @@ function Contracts() {
     }
   }
 
-  async function advanceMilestone(contractId, milestoneId, currentStatus) {
-    const idx = MILESTONE_STATUSES.indexOf(currentStatus);
-    const next = MILESTONE_STATUSES[Math.min(idx + 1, MILESTONE_STATUSES.length - 1)];
-    if (next === currentStatus) return;
-    await api.updateMilestoneStatus(contractId, milestoneId, next);
-    await load(challengeId);
-  }
-
   const ch = CHALLENGES.find((c) => c.id === challengeId);
 
   return (
@@ -2348,7 +2341,7 @@ function Contracts() {
                     <div style={{ width: `${c.progress.paidPercentage}%`, height: "100%", background: C.teal }} />
                   </div>
                   <div style={{ fontSize: 11.5, color: C.inkSoft, marginBottom: 10 }}>
-                    {c.progress.paidDisplay} paid of {c.progress.totalDisplay} ({c.progress.paidPercentage}%)
+                    {c.progress.paidDisplay} settled in simulator of {c.progress.totalDisplay} ({c.progress.paidPercentage}%)
                   </div>
                   {c.milestones.map((m) => (
                     <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderTop: `1px solid ${C.line}` }}>
@@ -2360,11 +2353,7 @@ function Contracts() {
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ fontSize: 11.5, fontWeight: 700, color: MILESTONE_STATUS_COLOR[m.status] }}>{m.status}</span>
-                        {m.status !== "Paid" && (
-                          <Btn small variant="secondary" onClick={() => advanceMilestone(c.id, m.id, m.status)}>
-                            Mark {MILESTONE_STATUSES[MILESTONE_STATUSES.indexOf(m.status) + 1]}
-                          </Btn>
-                        )}
+                        <Btn small variant="secondary" onClick={onPayments}>Open Payments</Btn>
                       </div>
                     </div>
                   ))}
@@ -2406,48 +2395,6 @@ function Contracts() {
 
 /* ---------------------------------------------------------------------- */
 /*  PAYMENTS                                                                */
-/* ---------------------------------------------------------------------- */
-function Payments() {
-  const color = { Paid: C.teal, "Approval Pending": C.brass, Overdue: C.rust, "Invoice Uploaded": C.ink };
-  return (
-    <div>
-      <SectionTitle eyebrow="TRANSPARENT & MILESTONE-LINKED" title="Payments" />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 18 }}>
-        <Metric label="Paid This Quarter" value="₹41.2 L" icon={CheckCircle2} tone={C.teal} />
-        <Metric label="Pending Approval" value="₹6.5 L" icon={Clock} tone={C.brass} />
-        <Metric label="Overdue" value="₹3.2 L" sub="1 invoice, 11 days" icon={AlertTriangle} tone={C.rust} />
-        <Metric label="Avg. Days to Pay" value="6.1 d" sub="SLA target: 7 d" icon={Gauge} />
-      </div>
-      <Card noPad>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ textAlign: "left", color: C.inkSoft, fontSize: 11 }}>
-              {["Startup", "Milestone", "Amount", "Status", "Days Pending", ""].map((h) => <th key={h} style={{ padding: "10px 14px" }}>{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {PAYMENTS.map((p) => (
-              <tr key={p.startup + p.milestone} style={{ borderTop: `1px solid ${C.line}` }}>
-                <td style={{ padding: "11px 14px", fontWeight: 600 }}>{p.startup}</td>
-                <td style={{ padding: "11px 14px", color: C.inkSoft }}>{p.milestone}</td>
-                <td style={{ padding: "11px 14px", ...mono }}>{p.amt}</td>
-                <td style={{ padding: "11px 14px", fontWeight: 700, color: color[p.status] }}>{p.status}</td>
-                <td style={{ padding: "11px 14px", color: p.status === "Overdue" ? C.rust : C.inkSoft }}>{p.days}</td>
-                <td style={{ padding: "11px 14px" }}>
-                  {p.status === "Approval Pending" && <Btn small variant="brass">Approve</Btn>}
-                  {p.status === "Overdue" && <Btn small variant="danger" icon={ArrowUpRight}>Escalate</Btn>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------------------- */
-/*  VALIDATION                                                             */
 /* ---------------------------------------------------------------------- */
 function Validation() {
   return (

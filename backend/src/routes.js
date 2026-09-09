@@ -10,6 +10,8 @@ import { generateContract, contractProgress, MILESTONE_STATUSES } from "./contra
 import { validatePilotDesign, createPilotDesign, advancePhase } from "./pilotDesign.js";
 
 const router = Router();
+let paymentProjection = c => c;
+export function setPaymentProjection(fn) { paymentProjection = fn; }
 
 function findChallenge(db, id) {
   return db.challenges.find((c) => c.id === id);
@@ -62,6 +64,7 @@ function findPilot(db, id) {
 
 /** Attach the startup name and rolled-up payment progress to a raw contract record. */
 function decorateContract(contract, db) {
+  contract = paymentProjection(contract);
   const startup = findStartup(db, contract.startupId);
   return { ...contract, startupName: startup ? startup.name : "Unknown startup", progress: contractProgress(contract.milestones) };
 }
@@ -403,23 +406,8 @@ router.post("/challenges/:id/contracts", (req, res) => {
 
 // Advance a milestone through Draft -> Submitted -> Payment Approved ->
 // Paid, tying payment directly to real progress.
-router.patch("/contracts/:contractId/milestones/:milestoneId", (req, res) => {
-  const db = readDB();
-  const contract = (db.contracts || []).find((c) => c.id === req.params.contractId);
-  if (!contract) return res.status(404).json({ error: "Contract not found" });
-
-  const milestone = contract.milestones.find((m) => m.id === req.params.milestoneId);
-  if (!milestone) return res.status(404).json({ error: "Milestone not found" });
-
-  const { status } = req.body || {};
-  if (!MILESTONE_STATUSES.includes(status)) {
-    return res.status(400).json({ error: `status must be one of: ${MILESTONE_STATUSES.join(", ")}` });
-  }
-
-  milestone.status = status;
-  writeDB(db);
-
-  res.json(decorateContract(contract, db));
+router.patch("/contracts/:contractId/milestones/:milestoneId", (_req, res) => {
+  res.status(409).json({ error: "Milestone payments are managed in the Payments workspace. Direct status changes are disabled." });
 });
 
 /* --------------------- Sandbox / Pilot Design ---------------------------- */

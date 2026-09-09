@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SEED_PATH = path.join(__dirname, "data", "seed.json");
-const STORE_PATH = path.join(__dirname, "data", "store.json");
+const STORE_PATH = path.join(__dirname, "data", "store-v3.json");
 
 function ensureStore() {
   if (!fs.existsSync(STORE_PATH)) {
