@@ -398,12 +398,6 @@ const STARTUPS = [
 // panels below (StartupDiscoveryPanel, EligibilityPanel) fetch live results
 // from the API instead of computing them in the browser.
 
-const EVAL_CRITERIA = [
-  { k: "Technical Feasibility", v: 8 }, { k: "Innovation", v: 9 },
-  { k: "Cost Effectiveness", v: 7 }, { k: "Scalability", v: 8 },
-  { k: "Implementation Capacity", v: 7 }, { k: "Risk", v: 3 },
-];
-
 const MILESTONES = [
   { n: "M1 — Sandbox setup & data access", due: "10 Oct 2026", amt: "₹4,00,000", status: "Payment Processing" },
   { n: "M2 — Pilot deployment, 3 districts", due: "05 Nov 2026", amt: "₹8,00,000", status: "Milestone Review" },
@@ -1059,7 +1053,7 @@ function ChallengesList({ onOpen, onCreate }) {
 /* ---------------------------------------------------------------------- */
 function ChallengeDetail({ ch, onBack }) {
   const [tab, setTab] = useState("overview");
-  const tabs = ["Overview", "AI Startup Discovery", "Eligibility Screening", "Evaluation Criteria", "Data / IP & Security", "Submitted Ideas (14)", "Updates"];
+  const tabs = ["Overview", "AI Startup Discovery", "Eligibility Screening", "Expert Evaluation", "Data / IP & Security", "Submitted Ideas (14)", "Updates"];
   return (
     <div>
       <div onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12.5, color: C.inkSoft, cursor: "pointer", marginBottom: 12, fontWeight: 600 }}>
@@ -1158,7 +1152,7 @@ function ChallengeDetail({ ch, onBack }) {
 
       {tab === "AI Startup Discovery" && <StartupDiscoveryPanel ch={ch} />}
       {tab === "Eligibility Screening" && <EligibilityPanel ch={ch} />}
-      {tab === "Evaluation Criteria" && <EvalCriteriaPanel />}
+      {tab === "Expert Evaluation" && <ExpertEvaluationPanel ch={ch} />}
       {tab === "Data / IP & Security" && <DataIpPanel />}
       {tab === "Submitted Ideas (14)" && <SubmittedIdeasPanel />}
       {tab === "Updates" && (
@@ -1357,21 +1351,191 @@ function EligibilityPanel({ ch }) {
   );
 }
 
-function EvalCriteriaPanel() {
+/* ---------------------------------------------------------------------- */
+/*  EXPERT EVALUATION PANEL — feature: fixed scoring rubric, auto-totalled */
+/*  and auto-ranked, with weightings that shift with the challenge's risk  */
+/*  profile. Live data from GET /api/challenges/:id/rubric + /evaluations  */
+/*  and POST /api/challenges/:id/evaluations (see /backend/src/evaluation.js) */
+/* ---------------------------------------------------------------------- */
+const EMPTY_RUBRIC_SCORES = { innovation: 5, feasibility: 5, cost: 5, security: 5, scalability: 5 };
+
+function ExpertEvaluationPanel({ ch }) {
+  const [data, setData] = useState(null); // { weights, message, evaluations, ranking }
+  const [startups, setStartups] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [expanded, setExpanded] = useState(null);
+
+  const [evaluatorName, setEvaluatorName] = useState("");
+  const [startupId, setStartupId] = useState("");
+  const [scores, setScores] = useState(EMPTY_RUBRIC_SCORES);
+  const [submitState, setSubmitState] = useState(null); // "sending" | "error" | null
+  const [submitError, setSubmitError] = useState(null);
+
+  function load() {
+    setError(null);
+    return api.getEvaluations(ch.id).then((res) => setData(res));
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([load(), api.getStartups().then((res) => { if (!cancelled) setStartups(res); })])
+      .catch((err) => { if (!cancelled) setError(err.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [ch.id]);
+
+  async function submit() {
+    setSubmitError(null);
+    if (!startupId) { setSubmitError("Choose a startup to score"); return; }
+    if (!evaluatorName.trim()) { setSubmitError("Enter your name as the evaluator"); return; }
+    setSubmitState("sending");
+    try {
+      await api.submitEvaluation(ch.id, { startupId, evaluatorName, scores });
+      await load();
+      setScores(EMPTY_RUBRIC_SCORES);
+      setSubmitState(null);
+    } catch (err) {
+      setSubmitState("error");
+      setSubmitError(err.message);
+    }
+  }
+
+  if (loading) return <Card>Loading the scoring rubric…</Card>;
+  if (error) return <Card style={{ color: C.rust }}>Couldn't reach the evaluation service: {error}. Is the backend running on port 4000?</Card>;
+
+  const { weights, message, evaluations, ranking } = data;
+  const previewTotal = computeWeightedTotal(scores, weights);
+
   return (
-    <Card>
-      <div style={{ fontWeight: 700, marginBottom: 12 }}>Weighted scoring rubric (from Evaluation Criteria template v2.0)</div>
-      {EVAL_CRITERIA.map((c) => (
-        <div key={c.k} style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
-          <div style={{ width: 190, fontSize: 12.8, fontWeight: 600 }}>{c.k}</div>
-          <div style={{ flex: 1, height: 7, background: C.paper, borderRadius: 4, overflow: "hidden" }}>
-            <div style={{ width: `${c.v * 10}%`, height: "100%", background: C.brass }} />
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 18 }}>
+      <div>
+        <Card style={{ marginBottom: 16, background: C.brassSoft, border: `1px solid ${C.brass}33` }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: C.brass, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <ShieldCheck size={16} color="#fff" />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{message}</div>
+              <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 3 }}>
+                Every evaluator scores against this same weighted rubric — totals and rankings are computed automatically, not by any one reviewer's personal judgement.
+              </div>
+            </div>
           </div>
-          <div style={{ width: 30, fontSize: 12.8, fontWeight: 700, textAlign: "right" }}>{c.v}/10</div>
-        </div>
-      ))}
-    </Card>
+        </Card>
+
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, marginBottom: 12 }}>Weighted scoring rubric</div>
+          {RUBRIC_CATEGORIES.map((c) => (
+            <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
+              <div style={{ width: 130, fontSize: 12.8, fontWeight: 600 }}>{c.label}</div>
+              <div style={{ flex: 1, height: 7, background: C.paper, borderRadius: 4, overflow: "hidden" }}>
+                <div style={{ width: `${weights[c.key]}%`, height: "100%", background: C.brass }} />
+              </div>
+              <div style={{ width: 36, fontSize: 12.8, fontWeight: 700, textAlign: "right" }}>{weights[c.key]}%</div>
+            </div>
+          ))}
+        </Card>
+
+        <Card>
+          <div style={{ fontWeight: 700, marginBottom: 12 }}>Score a startup</div>
+          <Field label="Evaluator name">
+            <input style={inputStyle} placeholder="e.g. Dr. A. Deshmukh" value={evaluatorName} onChange={(e) => setEvaluatorName(e.target.value)} />
+          </Field>
+          <Field label="Startup">
+            <select style={inputStyle} value={startupId} onChange={(e) => setStartupId(e.target.value)}>
+              <option value="">Select a startup…</option>
+              {startups.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </Field>
+          {RUBRIC_CATEGORIES.map((c) => (
+            <div key={c.key} style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.8, marginBottom: 5 }}>
+                <span style={{ fontWeight: 600 }}>{c.label} <span style={{ color: C.inkSoft, fontWeight: 500 }}>({weights[c.key]}% weight)</span></span>
+                <span style={{ fontWeight: 700 }}>{scores[c.key]}/10</span>
+              </div>
+              <input
+                type="range" min="0" max="10" value={scores[c.key]}
+                onChange={(e) => setScores({ ...scores, [c.key]: +e.target.value })}
+                style={{ width: "100%", accentColor: C.brass }}
+              />
+            </div>
+          ))}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+            <div style={{ fontSize: 12.5, color: C.inkSoft }}>
+              Auto-totalled: <span style={{ fontWeight: 700, color: C.ink }}>{previewTotal}/100</span>
+            </div>
+            <Btn small disabled={submitState === "sending"} onClick={submit}>
+              {submitState === "sending" ? "Submitting…" : "Submit score"}
+            </Btn>
+          </div>
+          {submitError && <div style={{ fontSize: 12, color: C.rust, marginTop: 8 }}>{submitError}</div>}
+        </Card>
+      </div>
+
+      <div>
+        <Card noPad style={{ marginBottom: 16 }}>
+          <div style={{ padding: "14px 16px", fontWeight: 700, borderBottom: `1px solid ${C.line}` }}>Ranking (auto-totalled, all evaluators)</div>
+          {ranking.length === 0 && <div style={{ padding: 16, fontSize: 12.5, color: C.inkSoft }}>No scores submitted yet.</div>}
+          {ranking.map((r) => (
+            <div key={r.startupId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 16px", borderTop: `1px solid ${C.line}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 22, height: 22, borderRadius: "50%", background: r.rank === 1 ? C.brass : C.navySoft, color: r.rank === 1 ? "#fff" : C.ink, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {r.rank}
+                </div>
+                <div>
+                  <div style={{ fontSize: 12.8, fontWeight: 600 }}>{r.startupName}</div>
+                  <div style={{ fontSize: 11, color: C.inkSoft }}>{r.evaluatorCount} evaluator{r.evaluatorCount === 1 ? "" : "s"}</div>
+                </div>
+              </div>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{r.avgTotal}</div>
+            </div>
+          ))}
+        </Card>
+
+        <Card noPad>
+          <div style={{ padding: "14px 16px", fontWeight: 700, borderBottom: `1px solid ${C.line}` }}>Individual scores</div>
+          {evaluations.length === 0 && <div style={{ padding: 16, fontSize: 12.5, color: C.inkSoft }}>No evaluations submitted for this challenge yet.</div>}
+          {evaluations.map((ev) => (
+            <div key={ev.id} style={{ borderTop: `1px solid ${C.line}` }}>
+              <div onClick={() => setExpanded(expanded === ev.id ? null : ev.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 16px", cursor: "pointer" }}>
+                <div>
+                  <div style={{ fontSize: 12.8, fontWeight: 600 }}>{ev.startupName}</div>
+                  <div style={{ fontSize: 11, color: C.inkSoft }}>by {ev.evaluatorName}</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>{ev.total}/100</div>
+                  {expanded === ev.id ? <ChevronUp size={14} color={C.inkSoft} /> : <ChevronDown size={14} color={C.inkSoft} />}
+                </div>
+              </div>
+              {expanded === ev.id && (
+                <div style={{ padding: "0 16px 12px 16px", display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {RUBRIC_CATEGORIES.map((c) => (
+                    <div key={c.key} style={{ fontSize: 11, color: C.inkSoft }}>{c.label}: <b style={{ color: C.ink }}>{ev.scores[c.key]}</b></div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </Card>
+      </div>
+    </div>
   );
+}
+
+const RUBRIC_CATEGORIES = [
+  { key: "innovation", label: "Innovation" },
+  { key: "feasibility", label: "Feasibility" },
+  { key: "cost", label: "Cost" },
+  { key: "security", label: "Security" },
+  { key: "scalability", label: "Scalability" },
+];
+
+/** Client-side preview of the weighted total, mirroring backend/src/evaluation.js computeTotal(). */
+function computeWeightedTotal(scores, weights) {
+  const total = RUBRIC_CATEGORIES.reduce((sum, { key }) => sum + (scores[key] / 10) * weights[key], 0);
+  return Math.round(total * 10) / 10;
 }
 
 function DataIpPanel() {

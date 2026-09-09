@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readDB, writeDB, resetDB } from "./db.js";
 import { matchStartupsForChallenge } from "./matching.js";
 import { runEligibilityCheck } from "./eligibility.js";
+import { weightsForChallenge, rubricMessage, validateScores, computeTotal, rankEvaluations } from "./evaluation.js";
 
 const router = Router();
 
@@ -20,6 +21,12 @@ function decorateApplication(app, db) {
   const challenge = findChallenge(db, app.challengeId);
   const verdict = startup ? runEligibilityCheck(startup, challenge) : null;
   return { ...app, startup, ...verdict };
+}
+
+/** Attach the startup name to a raw evaluation record. */
+function decorateEvaluation(ev, db) {
+  const startup = findStartup(db, ev.startupId);
+  return { ...ev, startupName: startup ? startup.name : "Unknown startup" };
 }
 
 router.get("/health", (_req, res) => res.json({ ok: true }));
@@ -101,11 +108,101 @@ router.post("/challenges/:id/applications", (req, res) => {
   res.status(201).json(decorateApplication(application, db));
 });
 
+/* ----------------------- Feature 4: Expert Evaluation -------------------- */
+// A fixed scoring rubric (innovation, feasibility, cost, security,
+// scalability) that every evaluator fills in and the system auto-totals and
+// ranks — with weightings that shift automatically based on the challenge's
+// risk profile, instead of relying on any one evaluator's personal judgement.
+router.get("/challenges/:id/rubric", (req, res) => {
+  const db = readDB();
+  const challenge = findChallenge(db, req.params.id);
+  if (!challenge) return res.status(404).json({ error: "Challenge not found" });
+
+  const { risk, adjusted, weights } = weightsForChallenge(challenge);
+  res.json({
+    challengeId: challenge.id,
+    riskProfile: risk,
+    adjusted,
+    weights,
+    message: rubricMessage({ risk, adjusted, weights }),
+  });
+});
+
+router.get("/challenges/:id/evaluations", (req, res) => {
+  const db = readDB();
+  const challenge = findChallenge(db, req.params.id);
+  if (!challenge) return res.status(404).json({ error: "Challenge not found" });
+
+  const rubric = weightsForChallenge(challenge);
+  const evaluations = (db.evaluations || [])
+    .filter((e) => e.challengeId === challenge.id)
+    .map((e) => decorateEvaluation(e, db))
+    .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+
+  res.json({
+    challengeId: challenge.id,
+    riskProfile: rubric.risk,
+    adjusted: rubric.adjusted,
+    weights: rubric.weights,
+    message: rubricMessage(rubric),
+    evaluations,
+    ranking: rankEvaluations(evaluations),
+  });
+});
+
+// An evaluator submits scores (0–10) for every rubric category against a
+// startup. The weighted total and startup ranking are always derived from
+// this same rubric, so every evaluator's scores are directly comparable.
+router.post("/challenges/:id/evaluations", (req, res) => {
+  const db = readDB();
+  const challenge = findChallenge(db, req.params.id);
+  if (!challenge) return res.status(404).json({ error: "Challenge not found" });
+
+  const { startupId, evaluatorName, scores } = req.body || {};
+  const startup = findStartup(db, startupId);
+  if (!startup) return res.status(400).json({ error: "Unknown startupId" });
+  if (!evaluatorName || !evaluatorName.trim()) return res.status(400).json({ error: "evaluatorName is required" });
+
+  const scoreError = validateScores(scores);
+  if (scoreError) return res.status(400).json({ error: scoreError });
+
+  const rubric = weightsForChallenge(challenge);
+  const total = computeTotal(scores, rubric.weights);
+
+  const evaluation = {
+    id: `ev_${randomUUID()}`,
+    challengeId: challenge.id,
+    startupId,
+    evaluatorName: evaluatorName.trim(),
+    scores,
+    weights: rubric.weights,
+    total,
+    submittedAt: new Date().toISOString(),
+  };
+
+  db.evaluations = db.evaluations || [];
+  db.evaluations.push(evaluation);
+  writeDB(db);
+
+  const allEvaluations = db.evaluations.filter((e) => e.challengeId === challenge.id).map((e) => decorateEvaluation(e, db));
+
+  res.status(201).json({
+    evaluation: decorateEvaluation(evaluation, db),
+    ranking: rankEvaluations(allEvaluations),
+  });
+});
+
 /* --------------------------------- Admin -------------------------------- */
 // Resets the demo data store back to its seed state.
 router.post("/admin/reset", (_req, res) => {
   const db = resetDB();
-  res.json({ ok: true, startups: db.startups.length, challenges: db.challenges.length, applications: db.applications.length });
+  res.json({
+    ok: true,
+    startups: db.startups.length,
+    challenges: db.challenges.length,
+    applications: db.applications.length,
+    evaluations: (db.evaluations || []).length,
+  });
 });
 
 export default router;

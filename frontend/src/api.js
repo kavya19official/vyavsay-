@@ -35,4 +35,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ startupId }),
     }),
+  getRubric: (challengeId) => request(`/challenges/${challengeId}/rubric`),
+  getEvaluations: (challengeId) => request(`/challenges/${challengeId}/evaluations`),
+  submitEvaluation: (challengeId, { startupId, evaluatorName, scores }) =>
+    request(`/challenges/${challengeId}/evaluations`, {
+      method: "POST",
+      body: JSON.stringify({ startupId, evaluatorName, scores }),
+    }),
 };

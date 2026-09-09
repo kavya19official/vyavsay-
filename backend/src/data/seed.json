@@ -21,5 +21,9 @@
     { "id": "ap_seed_1", "challengeId": "MH-TR-0022", "startupId": "st_tracknova", "submittedAt": "2026-08-20T10:00:00.000Z" },
     { "id": "ap_seed_2", "challengeId": "MH-TR-0022", "startupId": "st_routewise", "submittedAt": "2026-08-21T10:00:00.000Z" },
     { "id": "ap_seed_3", "challengeId": "MH-TR-0022", "startupId": "st_pathai", "submittedAt": "2026-08-22T10:00:00.000Z" }
+  ],
+  "evaluations": [
+    { "id": "ev_seed_1", "challengeId": "MH-TR-0022", "startupId": "st_tracknova", "evaluatorName": "Dr. A. Deshmukh", "scores": { "innovation": 8, "feasibility": 9, "cost": 7, "security": 8, "scalability": 9 }, "weights": { "innovation": 23, "feasibility": 23, "cost": 14, "security": 25, "scalability": 15 }, "total": 82.4, "submittedAt": "2026-08-25T09:00:00.000Z" },
+    { "id": "ev_seed_2", "challengeId": "MH-TR-0022", "startupId": "st_routewise", "evaluatorName": "Dr. A. Deshmukh", "scores": { "innovation": 7, "feasibility": 6, "cost": 8, "security": 5, "scalability": 6 }, "weights": { "innovation": 23, "feasibility": 23, "cost": 14, "security": 25, "scalability": 15 }, "total": 62.6, "submittedAt": "2026-08-25T09:20:00.000Z" }
   ]
 }
