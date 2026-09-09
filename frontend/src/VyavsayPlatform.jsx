@@ -1897,65 +1897,31 @@ function Marketplace() {
 
 /* ---------------------------------------------------------------------- */
 /*  EVALUATION WORKSPACE                                                   */
+/*  Picks a challenge, then reuses the same risk-weighted, auto-totalled,  */
+/*  auto-ranked rubric (ExpertEvaluationPanel) that backs the "Expert      */
+/*  Evaluation" tab on a challenge's own page — so every entry point into  */
+/*  Expert Evaluation scores against the one shared rubric instead of a    */
+/*  separate, disconnected mock that didn't match it (old: Technical /     */
+/*  Innovation / Cost / Scalability / Risk / Capacity, flat /60, no        */
+/*  weighting, no ranking).                                                */
 /* ---------------------------------------------------------------------- */
 function EvaluationWorkspace() {
-  const [scores, setScores] = useState({ Technical: 7, Innovation: 8, Cost: 6, Scalability: 7, Risk: 4, Capacity: 7 });
-  const total = Object.values(scores).reduce((a, b) => a + b, 0);
+  const evaluable = CHALLENGES.filter((c) => c.status !== "Under Review");
+  const [challengeId, setChallengeId] = useState(evaluable[0]?.id || "");
+  const ch = CHALLENGES.find((c) => c.id === challengeId);
+
   return (
     <div>
-      <SectionTitle eyebrow="EXPERT REVIEW" title="Evaluation Workspace — TrackNova / SIH26136" />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 18 }}>
-        <div>
-          <Card style={{ marginBottom: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <div style={{ fontWeight: 700 }}>Conflict-of-interest declaration</div>
-              <StatusChip label="Scaled / Closed" small />
-            </div>
-            <p style={{ fontSize: 12.5, color: C.inkSoft }}>I declare no financial, employment, or personal relationship with TrackNova or its founders. Signed 04 Sep 2026.</p>
-          </Card>
-          <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, marginBottom: 12 }}>Scoring rubric</div>
-            {Object.entries(scores).map(([k, v]) => (
-              <div key={k} style={{ marginBottom: 14 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.8, marginBottom: 5 }}>
-                  <span style={{ fontWeight: 600 }}>{k} {k === "Risk" ? "(lower is better)" : ""}</span><span style={{ fontWeight: 700 }}>{v}/10</span>
-                </div>
-                <input type="range" min="0" max="10" value={v} onChange={(e) => setScores({ ...scores, [k]: +e.target.value })} style={{ width: "100%", accentColor: C.brass }} />
-              </div>
-            ))}
-          </Card>
-          <Card>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Comments</div>
-            <textarea style={{ ...inputStyle, height: 80 }} placeholder="Notes visible in the audit trail…" />
-            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <Btn variant="brass" small icon={CheckCircle2}>Shortlist</Btn>
-              <Btn variant="secondary" small icon={AlertTriangle}>Needs Clarification</Btn>
-              <Btn variant="danger" small icon={X}>Reject</Btn>
-            </div>
-          </Card>
-        </div>
-        <div>
-          <Card style={{ marginBottom: 16, textAlign: "center" }}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: C.inkSoft, marginBottom: 8 }}>COMPOSITE SCORE</div>
-            <div style={{ ...serif, fontSize: 40, fontWeight: 600, color: C.ink }}>{total}<span style={{ fontSize: 18, color: C.inkSoft }}>/60</span></div>
-            <div style={{ fontSize: 12, color: C.teal, fontWeight: 600, marginTop: 4 }}>Above shortlist threshold (42)</div>
-          </Card>
-          <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 12.8, marginBottom: 8 }}>Evidence submitted</div>
-            {["Technical proposal.pdf", "Pilot case study — Nashik RTO.pdf", "Security self-attestation.pdf"].map((f) => (
-              <div key={f} style={{ display: "flex", gap: 6, fontSize: 12, color: C.inkSoft, padding: "5px 0" }}>
-                <FileText size={13} /> {f}
-              </div>
-            ))}
-          </Card>
-          <Card>
-            <div style={{ fontWeight: 700, fontSize: 12.8, marginBottom: 6 }}>Audit trail</div>
-            {["Review opened — 04 Sep, 10:02", "Evidence viewed — 04 Sep, 10:06", "Scores drafted — 04 Sep, 10:41"].map((a, i) => (
-              <div key={i} style={{ fontSize: 11.5, color: C.inkSoft, padding: "4px 0" }}>· {a}</div>
-            ))}
-          </Card>
-        </div>
-      </div>
+      <SectionTitle
+        eyebrow="EXPERT REVIEW"
+        title="Evaluation Workspace"
+        right={
+          <select style={{ ...inputStyle, width: 340 }} value={challengeId} onChange={(e) => setChallengeId(e.target.value)}>
+            {evaluable.map((c) => <option key={c.id} value={c.id}>{c.id} — {c.title}</option>)}
+          </select>
+        }
+      />
+      {ch ? <ExpertEvaluationPanel ch={ch} /> : <Card>Choose a challenge to begin scoring.</Card>}
     </div>
   );
 }
@@ -2016,27 +1982,141 @@ function PilotDesign() {
   );
 }
 
+/* ---------------------------------------------------------------------- */
+/*  PERFORMANCE MEASUREMENT                                                */
+/*  KPI targets (baseline + target) are locked in once, at pilot start.    */
+/*  As field results come in, achievement against that locked target is   */
+/*  computed automatically — pure math, no manual judgement about whether  */
+/*  a pilot "worked". See backend/src/performance.js.                     */
+/* ---------------------------------------------------------------------- */
+const STATUS_TONE = {
+  "Target met": C.teal,
+  "On track": C.teal,
+  "Behind target": C.brass,
+  "At risk": C.rust,
+  "Awaiting results": C.inkSoft,
+};
+
 function PilotPerformance() {
+  const [pilot, setPilot] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [drafts, setDrafts] = useState({}); // { [kpiKey]: "12.4" } — new-result inputs
+  const [savingKey, setSavingKey] = useState(null);
+
+  function load() {
+    setError(null);
+    return api.getPilotForChallenge("MH-TR-0022").then((p) => setPilot(p));
+  }
+
+  useEffect(() => {
+    setLoading(true);
+    load().catch((err) => setError(err.message)).finally(() => setLoading(false));
+  }, []);
+
+  async function recordResult(kpiKey) {
+    const raw = drafts[kpiKey];
+    const actual = parseFloat(raw);
+    if (raw === undefined || raw === "" || Number.isNaN(actual)) return;
+    setSavingKey(kpiKey);
+    try {
+      const updated = await api.recordKpiResult(pilot.id, kpiKey, actual);
+      setPilot(updated);
+      setDrafts({ ...drafts, [kpiKey]: "" });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  if (loading) return <Card>Loading KPI results…</Card>;
+  if (error) return <Card style={{ color: C.rust }}>Couldn't reach the performance service: {error}. Is the backend running on port 4000?</Card>;
+  if (!pilot) return <Card>No pilot found.</Card>;
+
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 18 }}>
-      <Metric label="ETA Accuracy (current vs baseline)" value="88%" sub="Baseline 61%" icon={Gauge} tone={C.teal} />
-      <Metric label="Route Coverage" value="2 / 2" sub="On target" icon={MapPin} tone={C.teal} />
-      <Metric label="App Adoption" value="11.4%" sub="Target 15%" icon={Users} tone={C.brass} />
-      <Metric label="Open Risk Flags" value="1" sub="Data latency spikes" icon={AlertTriangle} tone={C.rust} />
-      <Card style={{ gridColumn: "span 4" }}>
-        <div style={{ fontWeight: 700, marginBottom: 10 }}>Milestone progress</div>
-        <MilestoneMini />
-      </Card>
-      <Card style={{ gridColumn: "span 2" }}>
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>Field reports</div>
-        {["Week 4 site visit — Pune depot", "Week 8 driver feedback survey"].map((f) => (
-          <div key={f} style={{ display: "flex", gap: 6, fontSize: 12.5, color: C.inkSoft, padding: "5px 0" }}><Upload size={13} /> {f}</div>
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 18 }}>
+        <Card style={{ gridColumn: "span 1", textAlign: "center" }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: C.inkSoft, marginBottom: 6 }}>OVERALL KPI SCORE</div>
+          <div style={{ ...serif, fontSize: 32, fontWeight: 600, color: C.ink }}>
+            {pilot.overallScore === null ? "—" : `${pilot.overallScore}%`}
+          </div>
+          <div style={{ fontSize: 11.5, fontWeight: 600, marginTop: 4, color: STATUS_TONE[pilot.overallStatus] }}>{pilot.overallStatus}</div>
+          <div style={{ fontSize: 10.5, color: C.inkSoft, marginTop: 4 }}>{pilot.kpisReported}/{pilot.kpisTotal} KPIs reporting</div>
+        </Card>
+        {pilot.kpis.map((k) => (
+          <Metric
+            key={k.key}
+            label={k.label}
+            value={k.actual === null ? "Pending" : `${k.actual}${k.unit === "%" ? "%" : ` ${k.unit}`}`}
+            sub={`Target ${k.target}${k.unit === "%" ? "%" : ` ${k.unit}`} · baseline ${k.baseline}${k.unit === "%" ? "%" : ""}`}
+            icon={Gauge}
+            tone={STATUS_TONE[k.status]}
+          />
+        ))}
+      </div>
+
+      <Card noPad style={{ marginBottom: 18 }}>
+        <div style={{ padding: "14px 16px", fontWeight: 700, borderBottom: `1px solid ${C.line}` }}>
+          KPI targets — locked in at pilot start, achievement auto-calculated
+        </div>
+        {pilot.kpis.map((k) => (
+          <div key={k.key} style={{ padding: "14px 16px", borderTop: `1px solid ${C.line}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{k.label}</div>
+                <div style={{ fontSize: 11.5, color: C.inkSoft, marginTop: 2 }}>
+                  Baseline <b style={{ color: C.ink }}>{k.baseline}{k.unit}</b> · Target (locked) <b style={{ color: C.ink }}>{k.target}{k.unit}</b>
+                  {k.actual !== null && <> · Actual <b style={{ color: C.ink }}>{k.actual}{k.unit}</b></>}
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: STATUS_TONE[k.status] }}>
+                  {k.achievedPercent === null ? "—" : `${k.achievedPercent}%`}
+                </div>
+                <div style={{ fontSize: 10.5, color: C.inkSoft }}>{k.status}</div>
+              </div>
+            </div>
+            <div style={{ height: 6, background: C.paper, borderRadius: 4, overflow: "hidden", marginTop: 10 }}>
+              <div style={{
+                width: `${Math.max(0, Math.min(100, k.achievedPercent ?? 0))}%`, height: "100%",
+                background: STATUS_TONE[k.status] || C.brass,
+              }} />
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <input
+                type="number" placeholder="Record new field result…"
+                style={{ ...inputStyle, maxWidth: 220 }}
+                value={drafts[k.key] ?? ""}
+                onChange={(e) => setDrafts({ ...drafts, [k.key]: e.target.value })}
+              />
+              <Btn small variant="secondary" disabled={savingKey === k.key} onClick={() => recordResult(k.key)}>
+                {savingKey === k.key ? "Saving…" : "Save result"}
+              </Btn>
+            </div>
+          </div>
         ))}
       </Card>
-      <Card style={{ gridColumn: "span 2" }}>
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>Validator notes</div>
-        <p style={{ fontSize: 12.5, color: C.inkSoft }}>KPI verification on track for weeks 1–8. Latency spike (23 Aug) attributed to fleet API outage, not the startup's system — flagged as external risk.</p>
-      </Card>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 }}>
+        <Card style={{ gridColumn: "span 4" }}>
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>Milestone progress</div>
+          <MilestoneMini />
+        </Card>
+        <Card style={{ gridColumn: "span 2" }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Field reports</div>
+          {["Week 4 site visit — Pune depot", "Week 8 driver feedback survey"].map((f) => (
+            <div key={f} style={{ display: "flex", gap: 6, fontSize: 12.5, color: C.inkSoft, padding: "5px 0" }}><Upload size={13} /> {f}</div>
+          ))}
+        </Card>
+        <Card style={{ gridColumn: "span 2" }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Validator notes</div>
+          <p style={{ fontSize: 12.5, color: C.inkSoft }}>
+            KPI achievement above is computed automatically from the locked baseline/target and the latest recorded result — no manual scoring of "did this work".
+          </p>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -44,4 +44,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ startupId, evaluatorName, scores }),
     }),
+
+  // Feature 5: Performance Measurement (KPI targets locked in at pilot
+  // start, achievement % auto-computed from field results as they arrive).
+  getPilots: () => request("/pilots"),
+  getPilot: (pilotId) => request(`/pilots/${pilotId}`),
+  getPilotForChallenge: (challengeId) => request(`/challenges/${challengeId}/pilot`),
+  createPilot: ({ challengeId, startupId, name, kpis }) =>
+    request(`/pilots`, {
+      method: "POST",
+      body: JSON.stringify({ challengeId, startupId, name, kpis }),
+    }),
+  recordKpiResult: (pilotId, kpiKey, actual) =>
+    request(`/pilots/${pilotId}/kpis/${kpiKey}`, {
+      method: "PATCH",
+      body: JSON.stringify({ actual }),
+    }),
 };

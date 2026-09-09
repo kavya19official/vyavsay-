@@ -5,6 +5,7 @@ import { matchStartupsForChallenge } from "./matching.js";
 import { runEligibilityCheck } from "./eligibility.js";
 import { structureRequirement } from "./structuring.js";
 import { weightsForChallenge, rubricMessage, validateScores, computeTotal, rankEvaluations } from "./evaluation.js";
+import { computePilotPerformance, validateKpiTarget } from "./performance.js";
 
 const router = Router();
 
@@ -40,6 +41,21 @@ function slugChallengeId(title, existingIds) {
   let n = 2;
   while (existingIds.has(id)) id = `${base}-${n++}`;
   return id;
+}
+
+/** Attach startup/challenge names and computed KPI achievement to a pilot record. */
+function decoratePilot(pilot, db) {
+  const startup = findStartup(db, pilot.startupId);
+  const challenge = findChallenge(db, pilot.challengeId);
+  return computePilotPerformance({
+    ...pilot,
+    startupName: startup ? startup.name : "Unknown startup",
+    challengeTitle: challenge ? challenge.title : "Unknown challenge",
+  });
+}
+
+function findPilot(db, id) {
+  return (db.pilots || []).find((p) => p.id === id);
 }
 
 router.get("/health", (_req, res) => res.json({ ok: true }));
@@ -246,6 +262,86 @@ router.post("/challenges/:id/evaluations", (req, res) => {
   });
 });
 
+/* ---------------------- Feature 5: Performance Measurement --------------- */
+// KPI targets (baseline + target) are locked in once, when the pilot is
+// created, and never edited afterwards. As field results come in, how much
+// of the locked target was achieved is computed automatically — pure math,
+// no manual judgement from a department official or validator.
+router.get("/pilots", (_req, res) => {
+  const db = readDB();
+  res.json((db.pilots || []).map((p) => decoratePilot(p, db)));
+});
+
+router.get("/pilots/:id", (req, res) => {
+  const db = readDB();
+  const pilot = findPilot(db, req.params.id);
+  if (!pilot) return res.status(404).json({ error: "Pilot not found" });
+  res.json(decoratePilot(pilot, db));
+});
+
+router.get("/challenges/:id/pilot", (req, res) => {
+  const db = readDB();
+  const challenge = findChallenge(db, req.params.id);
+  if (!challenge) return res.status(404).json({ error: "Challenge not found" });
+  const pilot = (db.pilots || []).find((p) => p.challengeId === challenge.id);
+  if (!pilot) return res.status(404).json({ error: "No pilot has been started for this challenge yet" });
+  res.json(decoratePilot(pilot, db));
+});
+
+// Creates a pilot with its KPI targets locked in for good — baseline and
+// target are only ever set here, at pilot start.
+router.post("/pilots", (req, res) => {
+  const db = readDB();
+  const { challengeId, startupId, name, kpis } = req.body || {};
+
+  const challenge = findChallenge(db, challengeId);
+  if (!challenge) return res.status(400).json({ error: "Unknown challengeId" });
+  const startup = findStartup(db, startupId);
+  if (!startup) return res.status(400).json({ error: "Unknown startupId" });
+  if (!Array.isArray(kpis) || kpis.length === 0) return res.status(400).json({ error: "At least one KPI target is required" });
+
+  for (const kpi of kpis) {
+    const err = validateKpiTarget(kpi);
+    if (err) return res.status(400).json({ error: err });
+  }
+
+  const pilot = {
+    id: `pl_${randomUUID()}`,
+    challengeId,
+    startupId,
+    name: name || `${challenge.title} — ${startup.name}`,
+    startedAt: new Date().toISOString(),
+    // actual is null until the first field result comes in.
+    kpis: kpis.map((k) => ({ key: k.key, label: k.label, unit: k.unit || "", baseline: k.baseline, target: k.target, actual: null })),
+  };
+
+  db.pilots = db.pilots || [];
+  db.pilots.push(pilot);
+  writeDB(db);
+
+  res.status(201).json(decoratePilot(pilot, db));
+});
+
+// Records a new field reading for one KPI. This is the ONLY thing that can
+// ever change after a pilot starts — the locked baseline/target are
+// untouched, so the achievement % is always computed fresh, automatically.
+router.patch("/pilots/:id/kpis/:key", (req, res) => {
+  const db = readDB();
+  const pilot = findPilot(db, req.params.id);
+  if (!pilot) return res.status(404).json({ error: "Pilot not found" });
+
+  const kpi = (pilot.kpis || []).find((k) => k.key === req.params.key);
+  if (!kpi) return res.status(404).json({ error: "KPI not found on this pilot" });
+
+  const { actual } = req.body || {};
+  if (typeof actual !== "number" || Number.isNaN(actual)) return res.status(400).json({ error: "actual must be a number" });
+
+  kpi.actual = actual;
+  writeDB(db);
+
+  res.json(decoratePilot(pilot, db));
+});
+
 /* --------------------------------- Admin -------------------------------- */
 // Resets the demo data store back to its seed state.
 router.post("/admin/reset", (_req, res) => {
@@ -256,6 +352,7 @@ router.post("/admin/reset", (_req, res) => {
     challenges: db.challenges.length,
     applications: db.applications.length,
     evaluations: (db.evaluations || []).length,
+    pilots: (db.pilots || []).length,
   });
 });
 
