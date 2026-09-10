@@ -1,4 +1,5 @@
 import PaymentsWorkspace from "./PaymentsWorkspace.jsx";
+import ValidationWorkspace from "./ValidationWorkspace.jsx";
 import React, { useState, useMemo, useEffect } from "react";
 import {
   LayoutDashboard, Target, Rocket, FileText, ClipboardCheck, FlaskConical,
@@ -833,15 +834,15 @@ export default function App() {
           <div style={{ flex: 1 }} />
           <Bell size={17} color={C.inkSoft} style={{ cursor: "pointer" }} />
           <div style={{ position: "relative" }}>
-            <div onClick={() => { if (view !== "payments") setRoleMenuOpen((s) => !s); }}
+            <div onClick={() => { if (!["payments", "validation", "scaleup"].includes(view)) setRoleMenuOpen((s) => !s); }}
               style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer", border: `1px solid ${C.line}`, borderRadius: 4, padding: "6px 10px" }}>
               <div style={{ width: 22, height: 22, borderRadius: "50%", background: C.brassSoft, color: C.brass, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>
-                {view === "payments" ? "P" : role[0]}
+                {["payments", "validation", "scaleup"].includes(view) ? "W" : role[0]}
               </div>
-              <div style={{ fontSize: 12.5, fontWeight: 600 }}>{view === "payments" ? "Payment workspace" : role}</div>
-              {view !== "payments" && <ChevronDown size={14} color={C.inkSoft} />}
+              <div style={{ fontSize: 12.5, fontWeight: 600 }}>{["payments", "validation", "scaleup"].includes(view) ? "Select account in workspace" : role}</div>
+              {!["payments", "validation", "scaleup"].includes(view) && <ChevronDown size={14} color={C.inkSoft} />}
             </div>
-            {view !== "payments" && roleMenuOpen && (
+            {!["payments", "validation", "scaleup"].includes(view) && roleMenuOpen && (
               <div style={{ position: "absolute", right: 0, top: 38, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 5, width: 200, boxShadow: "0 6px 18px rgba(20,33,61,0.1)", zIndex: 20 }}>
                 <div style={{ padding: "8px 12px", fontSize: 10.5, color: C.inkSoft, fontWeight: 700, borderBottom: `1px solid ${C.line}` }}>VIEW PLATFORM AS</div>
                 {ROLES.map((r) => (
@@ -865,8 +866,8 @@ export default function App() {
           {view === "pilots" && <Pilots />}
           {view === "contracts" && <Contracts onPayments={() => setView("payments")} />}
           {view === "payments" && <PaymentsWorkspace />}
-          {view === "validation" && <Validation />}
-          {view === "scaleup" && <ScaleUp />}
+          {view === "validation" && <ValidationWorkspace onPayments={() => setView("payments")} />}
+          {view === "scaleup" && <ValidationWorkspace gateOnly onPayments={() => setView("payments")} />}
           {view === "templates" && <Templates />}
           {view === "admin" && <Admin />}
         </main>

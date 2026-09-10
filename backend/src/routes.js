@@ -11,6 +11,8 @@ import { validatePilotDesign, createPilotDesign, advancePhase } from "./pilotDes
 
 const router = Router();
 let paymentProjection = c => c;
+let validationGate = () => ({eligible:false,reasons:['Validation service unavailable.']});
+export function setValidationGate(fn) { validationGate = fn; }
 export function setPaymentProjection(fn) { paymentProjection = fn; }
 
 function findChallenge(db, id) {
@@ -452,6 +454,11 @@ router.post("/pilot-design/:id/advance", (req, res) => {
   const pd = (db.pilotDesigns || []).find((p) => p.id === req.params.id);
   if (!pd) return res.status(404).json({ error: "Pilot design not found" });
 
+  const active = pd.phases.findIndex(p => p.status === 'Active');
+  if (pd.phases[active + 1]?.key === 'live') {
+    const check = validationGate(pd.id);
+    if (!check.eligible) return res.status(409).json({error:'Independent validation required before live rollout.', validation:check});
+  }
   const result = advancePhase(pd);
   if (result.error) return res.status(400).json({ error: result.error });
 
